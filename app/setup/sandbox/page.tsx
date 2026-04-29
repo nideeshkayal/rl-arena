@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Nav } from "../../../components/Nav";
+import { Icon } from "../../../components/Icon";
 import { BOTS, type BotId } from "../../../lib/data";
 
 export default function SandboxSetupPage() {
@@ -29,45 +30,34 @@ export default function SandboxSetupPage() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div className="page">
       <Nav />
-      <div style={{ padding: "48px 80px", maxWidth: 980, margin: "0 auto", width: "100%" }}>
-        <Link
-          href="/"
-          style={{
-            color: "var(--color-ink-3)",
-            fontSize: 13,
-            fontWeight: 600,
-            marginBottom: 24,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          ← Back
+      <div className="shell" style={{ paddingTop: 40, paddingBottom: 64 }}>
+        <Link href="/" style={{ color: "var(--color-ink-3)", fontSize: 13, fontWeight: 600, marginBottom: 24, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="arrow-left" size={14} /> Back
         </Link>
-        <div
+        <div className="eyebrow" style={{ color: "var(--color-gain)", marginBottom: 12 }}>
+          Sandbox · custom setup
+        </div>
+        <h2
           style={{
-            fontFamily: "var(--font-body)",
-            fontSize: 11,
+            fontFamily: "var(--font-display)",
+            fontSize: "var(--hero-2xl)",
             fontWeight: 700,
-            color: "var(--color-gain)",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
+            letterSpacing: "-0.025em",
+            lineHeight: 1.05,
+            color: "var(--color-ink)",
             marginBottom: 12,
           }}
         >
-          Sandbox · custom setup
-        </div>
-        <h2 style={{ fontFamily: "var(--font-display)", fontSize: 40, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--color-ink)", marginBottom: 8 }}>
-          Build your own arena
+          Build your own arena.
         </h2>
-        <p style={{ fontSize: 16, color: "var(--color-ink-3)", marginBottom: 32, maxWidth: 640 }}>
-          Tune the rules and pick your opponents. See how each bot&apos;s strategy holds up under
+        <p style={{ fontSize: "clamp(14px, 1.5vw, 16px)", color: "var(--color-ink-3)", marginBottom: 32, maxWidth: 640, lineHeight: 1.55 }}>
+          Tune the rules, pick your opponents, and see how each bot&apos;s strategy holds up under
           conditions you choose.
         </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <div className="setup-sliders" style={{ marginBottom: 24 }}>
           <SliderCard
             label="Starting cash"
             value={`$${cash.toLocaleString()}`}
@@ -77,6 +67,7 @@ export default function SandboxSetupPage() {
             current={cash}
             onChange={setCash}
             tint="var(--color-primary)"
+            icon="coins"
           />
           <SliderCard
             label="Total turns"
@@ -87,6 +78,7 @@ export default function SandboxSetupPage() {
             current={turns}
             onChange={setTurns}
             tint="var(--color-info)"
+            icon="hourglass"
           />
           <SliderCard
             label="Market volatility"
@@ -97,30 +89,12 @@ export default function SandboxSetupPage() {
             current={vol}
             onChange={setVol}
             tint="var(--color-loss)"
+            icon="activity"
             help={vol < 0.7 ? "Calm market — slow grind." : vol < 1.4 ? "Normal market." : vol < 2.2 ? "Choppy market." : "Wild west — anything can happen."}
           />
-          <div
-            style={{
-              background: "white",
-              borderRadius: 14,
-              border: "1px solid var(--color-border)",
-              padding: 18,
-              boxShadow: "0 2px 8px rgba(15,14,23,0.04)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "var(--color-ink-4)",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                marginBottom: 6,
-              }}
-            >
-              Estimated game length
-            </div>
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--color-ink)" }}>
+          <div className="card" style={{ padding: 18 }}>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>Estimated game length</div>
+            <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: "var(--color-ink)" }}>
               ~{Math.round(turns * 0.15)} minutes
             </div>
             <div style={{ fontSize: 12, color: "var(--color-ink-3)", marginTop: 4 }}>
@@ -129,28 +103,9 @@ export default function SandboxSetupPage() {
           </div>
         </div>
 
-        <div
-          style={{
-            background: "white",
-            borderRadius: 14,
-            border: "1px solid var(--color-border)",
-            padding: 20,
-            marginBottom: 32,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--color-ink-4)",
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              marginBottom: 12,
-            }}
-          >
-            Opponents — pick at least 1
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
+        <div className="card" style={{ padding: 20, marginBottom: 32 }}>
+          <div className="eyebrow" style={{ marginBottom: 12 }}>Opponents — pick at least one</div>
+          <div className="setup-bots">
             {BOTS.map((bot) => {
               const on = bots.includes(bot.id);
               return (
@@ -165,11 +120,14 @@ export default function SandboxSetupPage() {
                     textAlign: "left",
                     cursor: "pointer",
                     transition: "all 0.2s var(--ease-out)",
-                    opacity: on ? 1 : 0.6,
+                    opacity: on ? 1 : 0.55,
+                    color: "var(--color-ink)",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 18, color: bot.color, fontWeight: 700 }}>{bot.icon}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ color: bot.color, display: "inline-flex" }}>
+                      <Icon name={bot.icon} size={18} />
+                    </span>
                     <span style={{ fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 700 }}>{bot.name}</span>
                   </div>
                   <div style={{ fontSize: 11, color: bot.color, fontWeight: 600 }}>{on ? "Active" : "Disabled"}</div>
@@ -179,7 +137,7 @@ export default function SandboxSetupPage() {
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, flexWrap: "wrap" }}>
           <button
             onClick={() => {
               setCash(10000);
@@ -187,35 +145,14 @@ export default function SandboxSetupPage() {
               setVol(1);
               setBots(BOTS.map((b) => b.id));
             }}
-            style={{
-              background: "white",
-              color: "var(--color-ink)",
-              padding: "14px 24px",
-              borderRadius: 10,
-              fontSize: 14,
-              fontWeight: 600,
-              border: "1.5px solid var(--color-border)",
-            }}
+            className="btn btn-secondary btn-md"
+            style={{ fontSize: 13 }}
           >
-            Reset
+            <Icon name="refresh" size={14} /> Reset
           </button>
-          <button
-            onClick={start}
-            disabled={bots.length === 0}
-            style={{
-              background: bots.length > 0 ? "var(--color-primary)" : "var(--color-surface-2)",
-              color: bots.length > 0 ? "white" : "var(--color-ink-4)",
-              padding: "14px 36px",
-              borderRadius: 10,
-              fontSize: 15,
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-              boxShadow: bots.length > 0 ? "0 4px 16px rgba(61,59,243,0.3)" : "none",
-              cursor: bots.length > 0 ? "pointer" : "not-allowed",
-            }}
-          >
-            Start Sandbox →
+          <button onClick={start} disabled={bots.length === 0} className="btn btn-primary btn-lg">
+            Start Sandbox
+            <Icon name="arrow-right" size={16} />
           </button>
         </div>
       </div>
@@ -233,6 +170,7 @@ function SliderCard({
   onChange,
   tint,
   help,
+  icon,
 }: {
   label: string;
   value: string;
@@ -243,30 +181,15 @@ function SliderCard({
   onChange: (v: number) => void;
   tint: string;
   help?: string;
+  icon: "coins" | "hourglass" | "activity";
 }) {
   return (
-    <div
-      style={{
-        background: "white",
-        borderRadius: 14,
-        border: "1px solid var(--color-border)",
-        padding: 18,
-        boxShadow: "0 2px 8px rgba(15,14,23,0.04)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          color: "var(--color-ink-4)",
-          letterSpacing: "0.06em",
-          textTransform: "uppercase",
-          marginBottom: 6,
-        }}
-      >
-        {label}
+    <div className="card" style={{ padding: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span style={{ color: tint, display: "inline-flex" }}><Icon name={icon} size={16} /></span>
+        <span className="eyebrow">{label}</span>
       </div>
-      <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: tint, marginBottom: 10 }}>
+      <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: tint, marginBottom: 10 }}>
         {value}
       </div>
       <input

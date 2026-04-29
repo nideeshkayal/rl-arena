@@ -467,7 +467,7 @@ export function leaderboard(state: GameState): LeaderboardEntry[] {
       isPlayer: true,
       value: portfolioValue(state.player, state.prices),
       return: (portfolioValue(state.player, state.prices) - sc) / sc,
-      icon: "👤",
+      icon: "user",
     },
     ...state.activeBots.map<Omit<LeaderboardEntry, "rank">>((id) => {
       const bot = BOTS.find((b) => b.id === id)!;

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Nav } from "../../components/Nav";
+import { Icon } from "../../components/Icon";
 import { BOTS } from "../../lib/data";
 
 export default function LearnPage() {
@@ -27,7 +28,7 @@ export default function LearnPage() {
         }
       />
 
-      <div style={{ padding: "56px 80px 80px", maxWidth: 980, margin: "0 auto", width: "100%" }}>
+      <div className="learn-content">
         <div
           style={{
             display: "inline-flex",
@@ -44,7 +45,7 @@ export default function LearnPage() {
             marginBottom: 20,
           }}
         >
-          📚 Reinforcement Learning, in plain English
+          <Icon name="book" size={13} /> Reinforcement Learning, in plain English
         </div>
         <h1
           className="slide-up"
@@ -95,12 +96,12 @@ export default function LearnPage() {
           <h3 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, marginBottom: 24 }}>
             Observe → Act → Receive reward → Update
           </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+          <div className="rl-loop-grid">
             {[
-              { step: "1. Observe", icon: "👁️", desc: "Agent sees the market state — prices, trends, recent volatility, its own holdings.", color: "var(--color-primary)" },
-              { step: "2. Act", icon: "🎯", desc: "It picks BUY, SELL, or HOLD on an asset. The choice depends on its policy.", color: "var(--color-info)" },
-              { step: "3. Reward", icon: "💎", desc: "The market moves. The agent gets a reward — positive, negative, or zero.", color: "var(--color-gain)" },
-              { step: "4. Update", icon: "🧠", desc: "The agent nudges its policy toward actions that paid off. Over millions of turns, a strategy emerges.", color: "var(--color-sniper, #8B5CF6)" },
+              { step: "1. Observe", iconName: "eye" as const, desc: "Agent sees the market state — prices, trends, recent volatility, its own holdings.", color: "var(--color-primary)" },
+              { step: "2. Act", iconName: "crosshair" as const, desc: "It picks BUY, SELL, or HOLD on an asset. The choice depends on its policy.", color: "var(--color-info)" },
+              { step: "3. Reward", iconName: "gem" as const, desc: "The market moves. The agent gets a reward — positive, negative, or zero.", color: "var(--color-gain)" },
+              { step: "4. Update", iconName: "brain" as const, desc: "The agent nudges its policy toward actions that paid off. Over millions of turns, a strategy emerges.", color: "var(--color-sniper, #8B5CF6)" },
             ].map((s, i) => (
               <div
                 key={i}
@@ -111,7 +112,7 @@ export default function LearnPage() {
                   border: "1px solid var(--color-border)",
                 }}
               >
-                <div style={{ fontSize: 28, marginBottom: 10 }}>{s.icon}</div>
+                <div style={{ marginBottom: 10, color: s.color, display: "inline-flex" }}><Icon name={s.iconName} size={28} /></div>
                 <div
                   style={{
                     fontSize: 11,
@@ -155,14 +156,13 @@ export default function LearnPage() {
             {BOTS.map((bot) => (
               <div
                 key={bot.id}
+                className="reward-card-grid"
                 style={{
                   background: "white",
                   borderRadius: 16,
                   border: `1px solid var(--color-border)`,
                   borderLeft: `4px solid ${bot.color}`,
                   padding: "20px 24px",
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr auto",
                   gap: 20,
                   alignItems: "center",
                   boxShadow: "0 2px 8px rgba(15,14,23,0.04)",
@@ -191,7 +191,7 @@ export default function LearnPage() {
                     fontWeight: 700,
                   }}
                 >
-                  {bot.icon}
+                  <Icon name={bot.icon} size={28} />
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
@@ -246,7 +246,7 @@ export default function LearnPage() {
               marginBottom: 12,
             }}
           >
-            🔑 The big idea
+            <Icon name="key" size={14} /> The big idea
           </div>
           <h3 style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 700, lineHeight: 1.2, marginBottom: 12 }}>
             The reward function is the soul of an RL agent.
@@ -264,7 +264,7 @@ export default function LearnPage() {
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 16 }}>
             RL concepts hiding in this game
           </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div className="concepts-grid">
             {[
               { title: "Policy", body: "A function from state → action. Each bot's `policy` weights (aggression, patience, riskTolerance…) define how it scores each possible move." },
               { title: "Exploration vs exploitation", body: "ChaosBot has high `noise` — it explores. SniperBot has high `patience` — it exploits only when confident." },
@@ -303,7 +303,7 @@ export default function LearnPage() {
             boxShadow: "0 4px 16px rgba(15,14,23,0.06)",
           }}
         >
-          <div style={{ fontSize: 30, marginBottom: 8 }}>🎮</div>
+          <div style={{ marginBottom: 8, color: "var(--color-primary)", display: "inline-flex" }}><Icon name="gamepad" size={30} /></div>
           <h3 style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
             Now go test it
           </h3>

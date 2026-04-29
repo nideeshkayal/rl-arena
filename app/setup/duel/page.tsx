@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Nav } from "../../../components/Nav";
+import { Icon } from "../../../components/Icon";
 import { BOTS, type BotId } from "../../../lib/data";
 
 export default function DuelSetupPage() {
@@ -17,9 +18,9 @@ export default function DuelSetupPage() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div className="page">
       <Nav />
-      <div style={{ padding: "48px 80px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+      <div className="shell" style={{ paddingTop: 40, paddingBottom: 64 }}>
         <Link
           href="/"
           style={{
@@ -32,31 +33,34 @@ export default function DuelSetupPage() {
             gap: 6,
           }}
         >
-          ← Back
+          <Icon name="arrow-left" size={14} /> Back
         </Link>
-        <div
+        <div className="eyebrow" style={{ color: "var(--color-primary)", marginBottom: 12 }}>
+          Quick Duel · 20 turns · Prediction mode
+        </div>
+        <h2
           style={{
-            fontFamily: "var(--font-body)",
-            fontSize: 11,
+            fontFamily: "var(--font-display)",
+            fontSize: "var(--hero-2xl)",
             fontWeight: 700,
-            color: "var(--color-primary)",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
+            letterSpacing: "-0.025em",
+            lineHeight: 1.05,
+            color: "var(--color-ink)",
             marginBottom: 12,
           }}
         >
-          Quick Duel · 20 turns · Prediction mode
-        </div>
-        <h2 style={{ fontFamily: "var(--font-display)", fontSize: 40, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--color-ink)", marginBottom: 8 }}>
-          Pick your opponent
+          Pick your opponent.
         </h2>
-        <p style={{ fontSize: 16, color: "var(--color-ink-3)", marginBottom: 16, maxWidth: 720 }}>
-          Each turn, you&apos;ll predict what they&apos;re going to do — BUY, SELL, or HOLD —
-          before they reveal it. Correct guesses earn a <strong style={{ color: "var(--color-gain)" }}>$200 bonus</strong>.
-          The better you understand their reward function, the easier it gets.
+        <p style={{ fontSize: "clamp(14px, 1.5vw, 16px)", color: "var(--color-ink-3)", maxWidth: 720, marginBottom: 14, lineHeight: 1.55 }}>
+          Each turn you&apos;ll predict what they do — buy, hold, or sell — before they reveal it.
+          A correct guess pays a <strong style={{ color: "var(--color-gain)" }}>$200 bonus</strong>. The
+          better you understand their reward function, the easier it gets.
         </p>
         <div
           style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
             background: "var(--color-primary-dim)",
             borderRadius: 10,
             padding: "10px 14px",
@@ -64,23 +68,24 @@ export default function DuelSetupPage() {
             fontSize: 13,
             fontWeight: 600,
             marginBottom: 32,
-            display: "inline-block",
           }}
         >
-          💡 Tip: read the bot&apos;s reward function before you pick — it tells you how they think.
+          <Icon name="lightbulb" size={16} />
+          Read the bot&apos;s reward function before you pick. It tells you how they think.
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 14, marginBottom: 32 }}>
+        <div className="setup-bots" style={{ marginBottom: 32 }}>
           {BOTS.map((bot) => {
             const isSel = selected === bot.id;
             const isHov = hovered === bot.id;
             return (
-              <div
+              <button
                 key={bot.id}
                 onClick={() => setSelected(bot.id)}
                 onMouseEnter={() => setHovered(bot.id)}
                 onMouseLeave={() => setHovered(null)}
                 style={{
+                  textAlign: "left",
                   background: isSel ? bot.dim : "white",
                   border: isSel ? `2px solid ${bot.color}` : "1px solid var(--color-border)",
                   borderRadius: 18,
@@ -93,23 +98,21 @@ export default function DuelSetupPage() {
                     : "0 2px 8px rgba(15,14,23,0.05)",
                   transform: isSel ? "translateY(-4px)" : isHov ? "translateY(-2px)" : "none",
                   transition: "all 0.25s var(--ease-out)",
+                  color: "var(--color-ink)",
                 }}
               >
                 <div
+                  className="avatar"
                   style={{
+                    width: "100%",
                     height: 72,
                     background: bot.dim,
                     borderRadius: 12,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 32,
                     color: bot.color,
-                    fontWeight: 700,
                     marginBottom: 14,
                   }}
                 >
-                  {bot.icon}
+                  <Icon name={bot.icon} size={32} strokeWidth={1.5} />
                 </div>
                 <div style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, color: "var(--color-ink)", marginBottom: 4 }}>
                   {bot.name}
@@ -117,17 +120,23 @@ export default function DuelSetupPage() {
                 <div style={{ fontSize: 11, fontWeight: 600, color: bot.color, marginBottom: 8 }}>{bot.role}</div>
                 <div style={{ fontSize: 12, color: "var(--color-ink-3)", lineHeight: 1.5, marginBottom: 12 }}>{bot.desc}</div>
                 <div style={{ height: 4, background: "var(--color-border)", borderRadius: 2, marginBottom: 4, overflow: "hidden" }}>
-                  <div style={{ height: 4, width: `${bot.risk}%`, background: bot.color, borderRadius: 2, transition: "width 0.5s var(--ease-out)" }} />
+                  <div
+                    style={{
+                      height: 4,
+                      width: `${bot.risk}%`,
+                      background: bot.color,
+                      borderRadius: 2,
+                      transition: "width 0.5s var(--ease-out)",
+                    }}
+                  />
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 10, color: "var(--color-ink-4)", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                    Risk
-                  </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: bot.color }}>
+                  <span className="eyebrow" style={{ fontSize: 10 }}>Risk</span>
+                  <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: bot.color }}>
                     {bot.winRate}% win
                   </span>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -143,36 +152,32 @@ export default function DuelSetupPage() {
                 borderRadius: 16,
                 padding: "20px 24px",
                 marginBottom: 32,
-                display: "flex",
+                display: "grid",
+                gridTemplateColumns: "auto 1fr",
                 gap: 20,
                 alignItems: "flex-start",
               }}
             >
               <div
+                className="avatar"
                 style={{
-                  fontSize: 36,
                   width: 60,
                   height: 60,
                   background: "white",
                   borderRadius: 14,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                  flexShrink: 0,
                   color: bot.color,
-                  fontWeight: 700,
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                 }}
               >
-                {bot.icon}
+                <Icon name={bot.icon} size={28} strokeWidth={1.6} />
               </div>
-              <div style={{ flex: 1 }}>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, color: "var(--color-ink)", marginBottom: 6 }}>
                   {bot.name} — Reward function
                 </div>
                 <div
+                  className="mono"
                   style={{
-                    fontFamily: "var(--font-mono)",
                     fontSize: 13,
                     fontWeight: 600,
                     color: "var(--color-ink)",
@@ -209,40 +214,13 @@ export default function DuelSetupPage() {
           );
         })()}
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
-          <Link
-            href="/learn"
-            style={{
-              background: "white",
-              color: "var(--color-ink)",
-              padding: "14px 24px",
-              borderRadius: 10,
-              fontSize: 14,
-              fontWeight: 600,
-              border: "1.5px solid var(--color-border)",
-              display: "inline-flex",
-              alignItems: "center",
-            }}
-          >
-            Read about reward functions
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, flexWrap: "wrap" }}>
+          <Link href="/learn" className="btn btn-secondary btn-md" style={{ fontSize: 13 }}>
+            <Icon name="book" size={15} /> Read about reward functions
           </Link>
-          <button
-            onClick={start}
-            disabled={!selected}
-            style={{
-              background: selected ? "var(--color-primary)" : "var(--color-surface-2)",
-              color: selected ? "white" : "var(--color-ink-4)",
-              padding: "14px 36px",
-              borderRadius: 10,
-              fontSize: 15,
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-              boxShadow: selected ? "0 4px 16px rgba(61,59,243,0.3)" : "none",
-              cursor: selected ? "pointer" : "not-allowed",
-            }}
-          >
-            Start Duel →
+          <button onClick={start} disabled={!selected} className="btn btn-primary btn-lg">
+            Start Duel
+            <Icon name="arrow-right" size={16} />
           </button>
         </div>
       </div>

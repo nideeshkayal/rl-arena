@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Nav } from "../../components/Nav";
 import { Badge } from "../../components/Badge";
+import { Icon, type IconName } from "../../components/Icon";
 import { MiniChart } from "../../components/MiniChart";
 import { BotChatter } from "../../components/BotChatter";
 import { ASSETS, BOTS, getMode, type Action, type AssetId, type Bot, type BotId } from "../../lib/data";
@@ -208,7 +209,7 @@ export function PlayClient() {
             transition: "all 0.15s var(--ease-out)",
           }}
         >
-          🔮 Insider Tip · {game.tipsRemaining}
+          <Icon name="eye" size={14} /> Insider Tip · {game.tipsRemaining}
         </button>
         {!game.done && (
           <button
@@ -227,26 +228,16 @@ export function PlayClient() {
               color: "white",
             }}
           >
-            {autoPlay ? "⏸ Stop" : "⏩ Auto-play"}
+            <Icon name={autoPlay ? "pause" : "fast-forward"} size={14} /> {autoPlay ? "Stop" : "Auto-play"}
           </button>
         )}
         {game.done && <Badge color={game.knockedOut ? "var(--color-loss)" : "var(--color-gain)"} bg={game.knockedOut ? "var(--color-loss-dim)" : "var(--color-gain-dim)"}>{game.knockedOut ? "Knocked Out" : "Game Over"}</Badge>}
       </div>
 
       {/* Main grid */}
-      <div
-        style={{
-          flex: 1,
-          overflow: "auto",
-          padding: "16px 24px",
-          display: "grid",
-          gridTemplateColumns: "1fr 320px 280px",
-          gap: 14,
-          alignItems: "start",
-        }}
-      >
+      <div className="play-grid">
         {/* LEFT */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+        <div className="play-left">
           <div
             style={{
               background: "white",
@@ -492,7 +483,7 @@ export function PlayClient() {
         </div>
 
         {/* CENTER — Leaderboard + Holdings + Prediction stats */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="play-mid">
           <ClickableLeaderboard entries={lb} turn={game.turn} totalTurns={game.totalTurns} onPickBot={setOpenBot} />
 
           {/* Prediction stats card (Duel only) */}
@@ -506,7 +497,7 @@ export function PlayClient() {
               }}
             >
               <div style={{ fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 700, color: "var(--color-ink)", marginBottom: 8 }}>
-                🧠 Your Read
+                <Icon name="brain" size={14} /> Your Read
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "baseline", marginBottom: 6 }}>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 700, color: "var(--color-primary)" }}>
@@ -573,7 +564,7 @@ export function PlayClient() {
         </div>
 
         {/* RIGHT — Bot chatter + RL hint */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="play-right">
           <BotChatterFiltered game={game} dialogues={dialogues} animKey={animKey} onPickBot={setOpenBot} />
           <div
             style={{
@@ -584,7 +575,7 @@ export function PlayClient() {
             }}
           >
             <div style={{ fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 700, color: "var(--color-primary)", marginBottom: 8, letterSpacing: "0.03em" }}>
-              ⚙️ Tap a bot
+              <Icon name="settings" size={13} /> Tap a bot
             </div>
             <p style={{ fontSize: 12, color: "var(--color-ink-2)", lineHeight: 1.6 }}>
               Click any bot in the leaderboard or chatter feed to see its policy weights and last decision in plain English.
@@ -613,13 +604,13 @@ function LivesIndicator({ lives, max }: { lives: number; max: number }) {
           <span
             key={i}
             style={{
-              fontSize: 18,
-              filter: alive ? "none" : "grayscale(1)",
+              display: "inline-flex",
+              color: alive ? "var(--color-loss)" : "var(--color-ink-4)",
               opacity: alive ? 1 : 0.3,
               transition: "all 0.3s var(--ease-out)",
             }}
           >
-            ❤️
+            <Icon name="heart" size={18} />
           </span>
         );
       })}
@@ -642,13 +633,13 @@ function EventCard({ game }: { game: GameState }) {
           alignItems: "flex-start",
         }}
       >
-        <span style={{ fontSize: 24, flexShrink: 0 }}>🔮</span>
+        <span style={{ fontSize: 24, flexShrink: 0, color: "var(--color-primary)", display: "inline-flex" }}><Icon name="eye" size={24} /></span>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>
             Insider preview · next turn
           </div>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)", marginBottom: 3 }}>
-            {game.peekedEvent.emoji} {game.peekedEvent.text}
+            <Icon name={game.peekedEvent.icon} size={16} /> {game.peekedEvent.text}
           </div>
           <div style={{ fontSize: 12, color: "var(--color-ink-2)" }}>{game.peekedEvent.desc}</div>
           <div style={{ fontSize: 11, color: "var(--color-primary-text)", marginTop: 6, fontStyle: "italic" }}>
@@ -674,7 +665,7 @@ function EventCard({ game }: { game: GameState }) {
           alignItems: "flex-start",
         }}
       >
-        <span style={{ fontSize: 24, flexShrink: 0 }}>{game.event.emoji}</span>
+        <span style={{ flexShrink: 0, color: game.event.color, display: "inline-flex" }}><Icon name={game.event.icon} size={22} /></span>
         <div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 3 }}>
             <span style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)" }}>
@@ -700,7 +691,7 @@ function EventCard({ game }: { game: GameState }) {
           alignItems: "center",
         }}
       >
-        <span style={{ fontSize: 18 }}>👋</span>
+        <span style={{ display: "inline-flex", color: "var(--color-primary)" }}><Icon name="sparkles" size={18} /></span>
         <div style={{ fontSize: 13, color: "var(--color-primary-text)", fontWeight: 600 }}>
           Game on. Pick an asset, set a quantity, then BUY / HOLD / SELL to advance.
         </div>
@@ -719,7 +710,7 @@ function EventCard({ game }: { game: GameState }) {
         alignItems: "center",
       }}
     >
-      <span style={{ fontSize: 18 }}>😶</span>
+      <span style={{ display: "inline-flex", color: "var(--color-ink-4)" }}><Icon name="pause" size={18} /></span>
       <div style={{ fontSize: 13, color: "var(--color-ink-4)", fontStyle: "italic" }}>
         Quiet turn. No major market events.
       </div>
@@ -753,7 +744,7 @@ function PredictionPrompt({ game, setGuess }: { game: GameState; setGuess: (a: A
               marginBottom: 4,
             }}
           >
-            🧠 Predict your opponent
+            <Icon name="brain" size={13} /> Predict your opponent
           </div>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)" }}>
             What will {oppBot.name} do this turn?
@@ -845,7 +836,7 @@ function ClickableLeaderboard({
         }}
       >
         <span style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)" }}>
-          🏆 Leaderboard
+          <Icon name="trophy" size={16} /> Leaderboard
         </span>
         <span
           style={{
@@ -893,7 +884,7 @@ function ClickableLeaderboard({
                 textAlign: "center",
               }}
             >
-              {i === 0 ? "🥇" : entry.rank}
+              {i === 0 ? <Icon name="crown" size={14} style={{ color: "var(--color-hold)" }} /> : entry.rank}
             </span>
             <div style={{ width: 10, height: 10, borderRadius: "50%", background: entry.color, flexShrink: 0, boxShadow: `0 0 0 2px ${entry.color}33` }} />
             <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--color-ink)" }}>
@@ -954,7 +945,7 @@ function BotChatterFiltered({
   return (
     <div style={{ background: "white", borderRadius: 14, border: "1px solid var(--color-border)", padding: "14px 16px" }}>
       <div style={{ fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 700, color: "var(--color-ink)", marginBottom: 12 }}>
-        💬 Bot Chatter
+        <Icon name="message-circle" size={15} /> Bot Chatter
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {activeBots.map((bot) => (
@@ -978,7 +969,7 @@ function BotChatterFiltered({
                 fontWeight: 700,
               }}
             >
-              {bot.icon}
+              <Icon name={bot.icon} size={15} />
             </div>
             <div style={{ background: bot.dim, borderRadius: "0 10px 10px 10px", padding: "7px 10px", flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: bot.color, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 2 }}>
@@ -1050,7 +1041,7 @@ function BotDetailModal({ botId, game, onClose }: { botId: BotId; game: GameStat
               fontWeight: 700,
             }}
           >
-            {bot.icon}
+            <Icon name={bot.icon} size={32} />
           </div>
           <div>
             <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: "var(--color-ink)" }}>
@@ -1067,7 +1058,7 @@ function BotDetailModal({ botId, game, onClose }: { botId: BotId; game: GameStat
               padding: 4,
             }}
           >
-            ✕
+            <Icon name="x" size={18} />
           </button>
         </div>
 
@@ -1151,10 +1142,10 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
     ? `${winnerBot.name} won. Its reward function — "${winnerBot.rewardFn}" — pushed it toward the strategy that paid off this game.`
     : "You finished first. Your strategy outperformed every trained bot.";
 
-  let title = "📊 Game over";
-  if (game.knockedOut) title = "💀 Knocked out!";
-  else if (player.rank === 1) title = "🥇 You won!";
-  else if (player.rank <= 3) title = "🎯 Great game!";
+  let title = "Game Over";
+  if (game.knockedOut) title = "Knocked Out!";
+  else if (player.rank === 1) title = "You Won!";
+  else if (player.rank <= 3) title = "Great Game!";
 
   return (
     <div
@@ -1201,7 +1192,7 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
           </span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 24, marginBottom: 32 }}>
+        <div className="results-grid" style={{ marginBottom: 32 }}>
           {/* Podium */}
           <div style={{ background: "white", borderRadius: 20, border: "1px solid var(--color-border)", padding: 24, boxShadow: "0 4px 16px rgba(15,14,23,0.06)" }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.06em", textTransform: "uppercase", textAlign: "center", marginBottom: 20 }}>
@@ -1231,7 +1222,7 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
                         animation: `podiumRise 0.6s var(--ease-spring) ${col * 0.1}s both`,
                       }}
                     >
-                      {entry.icon}
+                      {entry.isPlayer ? <Icon name="user" size={22} /> : <Icon name={(entry.icon || "target") as IconName} size={22} />}
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-ink)", textAlign: "center", maxWidth: 56 }}>
                       {entry.isPlayer ? "You" : entry.name.replace("Bot", "")}
@@ -1271,7 +1262,7 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
               }}
             >
               <div style={{ fontFamily: "var(--font-display)", fontSize: 64, fontWeight: 700, color: "white", lineHeight: 1 }}>
-                {game.knockedOut ? "💀" : grade.label}
+                {game.knockedOut ? <Icon name="skull" size={48} /> : grade.label}
               </div>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.6)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>
@@ -1286,14 +1277,14 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <StatCard icon="📈" bg="var(--color-gain-dim)" label="Final value" value={fmt$(player.value)} valueColor={player.return >= 0 ? "var(--color-gain)" : "var(--color-loss)"} />
-              <StatCard icon="⚡" bg="var(--color-primary-dim)" label="Best trade" value={stats.best ? `${stats.best.asset} ${fmtPct(stats.best.pnl)}` : "—"} valueColor="var(--color-ink)" />
-              <StatCard icon="📉" bg="var(--color-loss-dim)" label="Worst trade" value={stats.worst ? `${stats.worst.asset} ${fmtPct(stats.worst.pnl)}` : "—"} valueColor="var(--color-loss)" />
-              <StatCard icon="🔄" bg="var(--color-hold-dim)" label="Total trades" value={`${stats.count}`} valueColor="var(--color-ink)" />
+            <div className="results-stats-grid">
+              <StatCard iconName="trending-up" bg="var(--color-gain-dim)" label="Final value" value={fmt$(player.value)} valueColor={player.return >= 0 ? "var(--color-gain)" : "var(--color-loss)"} />
+              <StatCard iconName="zap" bg="var(--color-primary-dim)" label="Best trade" value={stats.best ? `${stats.best.asset} ${fmtPct(stats.best.pnl)}` : "—"} valueColor="var(--color-ink)" />
+              <StatCard iconName="trending-down" bg="var(--color-loss-dim)" label="Worst trade" value={stats.worst ? `${stats.worst.asset} ${fmtPct(stats.worst.pnl)}` : "—"} valueColor="var(--color-loss)" />
+              <StatCard iconName="refresh" bg="var(--color-hold-dim)" label="Total trades" value={`${stats.count}`} valueColor="var(--color-ink)" />
               {isDuel && (
                 <StatCard
-                  icon="🧠"
+                  iconName="brain"
                   bg="var(--color-info-dim)"
                   label="Predictions"
                   value={`${game.prediction.correct}/${game.prediction.total} (${game.prediction.total ? Math.round((game.prediction.correct / game.prediction.total) * 100) : 0}%)`}
@@ -1301,11 +1292,11 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
                 />
               )}
               {isDuel && (
-                <StatCard icon="💰" bg="var(--color-gain-dim)" label="Prediction $" value={fmt$(game.prediction.reward)} valueColor="var(--color-gain)" />
+                <StatCard iconName="coins" bg="var(--color-gain-dim)" label="Prediction $" value={fmt$(game.prediction.reward)} valueColor="var(--color-gain)" />
               )}
               {isSurvival && (
                 <StatCard
-                  icon="❤️"
+                  iconName="heart"
                   bg="var(--color-loss-dim)"
                   label="Lives left"
                   value={`${Math.max(0, game.lives)} / ${game.mode.startingLives}`}
@@ -1378,12 +1369,12 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
   );
 }
 
-function StatCard({ icon, bg, label, value, valueColor }: { icon: string; bg: string; label: string; value: string; valueColor: string }) {
+function StatCard({ iconName, bg, label, value, valueColor }: { iconName: IconName; bg: string; label: string; value: string; valueColor: string }) {
   return (
     <div style={{ background: "white", borderRadius: 14, border: "1px solid var(--color-border)", padding: "16px 18px" }}>
       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-          {icon}
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name={iconName} size={18} />
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 11, color: "var(--color-ink-4)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -1437,7 +1428,7 @@ function pickByPersonality(botId: BotId, action: Action, asset: AssetId | null):
       hold: ["Cash is a position too.", "I prefer not losing.", "Patience.", "No edge. Holding."],
     },
     yolo: {
-      buy: ["ALL IN ON " + (asset || "CRYPTX") + " 🚀", "MORE.", "BUY THE TOP. WHY NOT.", "DIAMOND HANDS."],
+      buy: ["ALL IN ON " + (asset || "CRYPTX") + "!", "MORE.", "BUY THE TOP. WHY NOT.", "DIAMOND HANDS."],
       sell: ["DUMPING " + (asset || "TECHX") + ".", "CASHING OUT BABY.", "TAKING THE WIN."],
       hold: ["Boring. Boring.", "Hold? Fine. For now.", "Where's the volatility???"],
     },

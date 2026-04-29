@@ -1,3 +1,5 @@
+import type { IconName } from "../components/Icon";
+
 export type BotId = "safe" | "yolo" | "sniper" | "chaos" | "adaptive";
 export type AssetId = "TECHX" | "BANKR" | "CRYPTX";
 export type Action = "buy" | "sell" | "hold";
@@ -7,7 +9,7 @@ export interface Bot {
   name: string;
   color: string;
   dim: string;
-  icon: string;
+  icon: IconName;
   role: string;
   desc: string;
   rewardFn: string;
@@ -55,7 +57,7 @@ export interface MarketEvent {
   asset: AssetId | "ALL";
   impact: number;
   color: string;
-  emoji: string;
+  icon: IconName;
   /** True if this event represents a crash — used in survival mode */
   crash?: boolean;
 }
@@ -66,7 +68,7 @@ export const BOTS: Bot[] = [
     name: "SafeBot",
     color: "#14B8A6",
     dim: "#CCFBF1",
-    icon: "⛨",
+    icon: "shield",
     role: "Cautious Investor",
     desc: "Buys dips, protects capital. Hates volatility.",
     rewardFn: "Reward = portfolio_return − 4 × drawdown",
@@ -87,7 +89,7 @@ export const BOTS: Bot[] = [
     name: "YOLOBot",
     color: "#F97316",
     dim: "#FFEDD5",
-    icon: "⚡",
+    icon: "zap",
     role: "Risk Addict",
     desc: "All-in on momentum. Wins big, or loses everything.",
     rewardFn: "Reward = max(portfolio_return)",
@@ -97,7 +99,7 @@ export const BOTS: Bot[] = [
     dialogue: [
       "ALL IN.",
       "No thoughts, head empty.",
-      "CRYPTX TO THE MOON 🚀",
+      "CRYPTX TO THE MOON!",
       "Why hold when you can YOLO?",
       "Pain is temporary. Gains are forever.",
       "Diversification is for cowards.",
@@ -108,7 +110,7 @@ export const BOTS: Bot[] = [
     name: "SniperBot",
     color: "#8B5CF6",
     dim: "#EDE9FE",
-    icon: "⊕",
+    icon: "crosshair",
     role: "Silent Assassin",
     desc: "Waits for perfect entries. Few trades, high precision.",
     rewardFn: "Reward = win_rate × avg_win_size",
@@ -122,7 +124,7 @@ export const BOTS: Bot[] = [
     name: "ChaosBot",
     color: "#F43F5E",
     dim: "#FFE4E8",
-    icon: "⇌",
+    icon: "shuffle",
     role: "Market Gambler",
     desc: "Trained on noisy signals. Unpredictable. Sometimes genius.",
     rewardFn: "Reward = E[return | high-noise observations]",
@@ -143,7 +145,7 @@ export const BOTS: Bot[] = [
     name: "AdaptiveBot",
     color: "#6366F1",
     dim: "#E0E7FF",
-    icon: "◎",
+    icon: "target",
     role: "Competitive Strategist",
     desc: "Watches the leaderboard. Aggressive when losing, protective when winning.",
     rewardFn: "Reward = relative_rank_improvement",
@@ -168,26 +170,26 @@ export const ASSETS: Asset[] = [
 ];
 
 export const EVENTS: (MarketEvent | null)[] = [
-  { text: "Tech Rally Begins",  desc: "TECHX surges on strong earnings.",                       asset: "TECHX",  impact:  0.08, color: "#10B981", emoji: "📈" },
-  { text: "Recession Fears",    desc: "Fed signals rate hike. Broad sell-off.",                 asset: "ALL",    impact: -0.05, color: "#F43F5E", emoji: "🔻" },
-  { text: "Meme Stock Frenzy",  desc: "CRYPTX becomes the meme of the week.",                   asset: "CRYPTX", impact:  0.15, color: "#F97316", emoji: "🎲" },
-  { text: "Earnings Surprise",  desc: "BANKR beats estimates. Sector rallies.",                 asset: "BANKR",  impact:  0.07, color: "#10B981", emoji: "💰" },
-  { text: "Market Panic",       desc: "Sentiment drops. Selling pressure across all assets.",   asset: "ALL",    impact: -0.08, color: "#F43F5E", emoji: "😱" },
-  { text: "Interest Rate Cut",  desc: "Central bank surprises with rate cut.",                  asset: "ALL",    impact:  0.06, color: "#10B981", emoji: "✂️" },
-  { text: "Crypto Winter",      desc: "Regulatory news hits CRYPTX hard.",                      asset: "CRYPTX", impact: -0.12, color: "#F43F5E", emoji: "❄️" },
-  { text: "Tech Earnings Miss", desc: "TECHX guidance disappoints investors.",                  asset: "TECHX",  impact: -0.09, color: "#F43F5E", emoji: "📉" },
-  { text: "Banking Scare",      desc: "BANKR shares slip on credit concerns.",                  asset: "BANKR",  impact: -0.06, color: "#F43F5E", emoji: "🏦" },
-  { text: "Risk-On Wave",       desc: "Investors pile into risk assets.",                       asset: "CRYPTX", impact:  0.10, color: "#10B981", emoji: "🌊" },
+  { text: "Tech Rally Begins",  desc: "TECHX surges on strong earnings.",                     asset: "TECHX",  impact:  0.08, color: "#10B981", icon: "trending-up" },
+  { text: "Recession Fears",    desc: "Fed signals rate hike. Broad sell-off.",               asset: "ALL",    impact: -0.05, color: "#F43F5E", icon: "trending-down" },
+  { text: "Meme Stock Frenzy",  desc: "CRYPTX becomes the meme of the week.",                 asset: "CRYPTX", impact:  0.15, color: "#F97316", icon: "dices" },
+  { text: "Earnings Surprise",  desc: "BANKR beats estimates. Sector rallies.",               asset: "BANKR",  impact:  0.07, color: "#10B981", icon: "banknote" },
+  { text: "Market Panic",       desc: "Sentiment drops. Selling pressure across all assets.", asset: "ALL",    impact: -0.08, color: "#F43F5E", icon: "alert-triangle" },
+  { text: "Interest Rate Cut",  desc: "Central bank surprises with rate cut.",                asset: "ALL",    impact:  0.06, color: "#10B981", icon: "scissors" },
+  { text: "Crypto Winter",      desc: "Regulatory news hits CRYPTX hard.",                    asset: "CRYPTX", impact: -0.12, color: "#F43F5E", icon: "snowflake" },
+  { text: "Tech Earnings Miss", desc: "TECHX guidance disappoints investors.",                asset: "TECHX",  impact: -0.09, color: "#F43F5E", icon: "trending-down" },
+  { text: "Banking Scare",      desc: "BANKR shares slip on credit concerns.",                asset: "BANKR",  impact: -0.06, color: "#F43F5E", icon: "building" },
+  { text: "Risk-On Wave",       desc: "Investors pile into risk assets.",                     asset: "CRYPTX", impact:  0.10, color: "#10B981", icon: "waves" },
   null, null, null, null, // quiet turns
 ];
 
 /** Crash events used in Survival mode at scheduled crash turns. */
 export const CRASH_EVENTS: MarketEvent[] = [
-  { text: "FLASH CRASH",       desc: "Algorithmic sell-off cascades across the market.", asset: "ALL",    impact: -0.18, color: "#F43F5E", emoji: "⚠️", crash: true },
-  { text: "BANK RUN",          desc: "Depositors panic. BANKR collapses.",               asset: "BANKR",  impact: -0.30, color: "#F43F5E", emoji: "🏦", crash: true },
-  { text: "RUG PULL",          desc: "Major CRYPTX project exit-scams.",                 asset: "CRYPTX", impact: -0.40, color: "#F43F5E", emoji: "💀", crash: true },
-  { text: "TECH MELTDOWN",     desc: "Tech sector implodes on bad guidance.",            asset: "TECHX",  impact: -0.25, color: "#F43F5E", emoji: "🔥", crash: true },
-  { text: "BLACK SWAN",        desc: "Unknown unknowns hit. Everything dumps.",          asset: "ALL",    impact: -0.22, color: "#F43F5E", emoji: "🦢", crash: true },
+  { text: "FLASH CRASH",   desc: "Algorithmic sell-off cascades across the market.", asset: "ALL",    impact: -0.18, color: "#F43F5E", icon: "alert-triangle", crash: true },
+  { text: "BANK RUN",      desc: "Depositors panic. BANKR collapses.",               asset: "BANKR",  impact: -0.30, color: "#F43F5E", icon: "building",       crash: true },
+  { text: "RUG PULL",      desc: "Major CRYPTX project exit-scams.",                 asset: "CRYPTX", impact: -0.40, color: "#F43F5E", icon: "skull",          crash: true },
+  { text: "TECH MELTDOWN", desc: "Tech sector implodes on bad guidance.",            asset: "TECHX",  impact: -0.25, color: "#F43F5E", icon: "flame",          crash: true },
+  { text: "BLACK SWAN",    desc: "Unknown unknowns hit. Everything dumps.",          asset: "ALL",    impact: -0.22, color: "#F43F5E", icon: "bird",           crash: true },
 ];
 
 export type ModeId = "duel" | "royale" | "survival" | "sandbox";
@@ -196,7 +198,7 @@ export interface ModeConfig {
   id: ModeId;
   name: string;
   turns: number;
-  icon: string;
+  icon: IconName;
   desc: string;
   bg: string;
   iconBg: string;
@@ -227,7 +229,7 @@ export const GAME_MODES: ModeConfig[] = [
     id: "duel",
     name: "Quick Duel",
     turns: 20,
-    icon: "⚔️",
+    icon: "swords",
     desc: "Pick one bot. Predict every move. Beat them.",
     bg: "#E8E7FF",
     iconBg: "#3D3BF3",
@@ -247,7 +249,7 @@ export const GAME_MODES: ModeConfig[] = [
     id: "royale",
     name: "Arena Royale",
     turns: 50,
-    icon: "🏟️",
+    icon: "layout-grid",
     desc: "You vs all 5 bots. Live leaderboard.",
     bg: "#3D3BF3",
     iconBg: "white",
@@ -267,7 +269,7 @@ export const GAME_MODES: ModeConfig[] = [
     id: "survival",
     name: "Survival",
     turns: 60,
-    icon: "💀",
+    icon: "skull",
     desc: "3 lives. Crashes every 8 turns. Don't get wrecked.",
     bg: "#FFE4E8",
     iconBg: "#F43F5E",
@@ -287,7 +289,7 @@ export const GAME_MODES: ModeConfig[] = [
     id: "sandbox",
     name: "Sandbox",
     turns: 30,
-    icon: "🔧",
+    icon: "wrench",
     desc: "Configure everything. Make your own arena.",
     bg: "#D1FAE5",
     iconBg: "#10B981",

@@ -1,6 +1,7 @@
 "use client";
 
 import { BOTS, type BotId } from "../lib/data";
+import { Icon } from "./Icon";
 
 interface BotChatterProps {
   dialogues: Partial<Record<BotId, string>>;
@@ -9,14 +10,7 @@ interface BotChatterProps {
 
 export function BotChatter({ dialogues, animKey }: BotChatterProps) {
   return (
-    <div
-      style={{
-        background: "white",
-        borderRadius: 14,
-        border: "1px solid var(--color-border)",
-        padding: "14px 16px",
-      }}
-    >
+    <div className="card" style={{ padding: "14px 16px" }}>
       <div
         style={{
           fontFamily: "var(--font-display)",
@@ -24,29 +18,22 @@ export function BotChatter({ dialogues, animKey }: BotChatterProps) {
           fontWeight: 700,
           color: "var(--color-ink)",
           marginBottom: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
         }}
       >
-        💬 Bot Chatter
+        <Icon name="message-circle" size={16} />
+        Bot Chatter
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {BOTS.map((bot) => (
           <div key={bot.id} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
             <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                background: bot.dim,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 14,
-                flexShrink: 0,
-                color: bot.color,
-                fontWeight: 700,
-              }}
+              className="avatar"
+              style={{ width: 28, height: 28, borderRadius: 8, background: bot.dim, color: bot.color }}
             >
-              {bot.icon}
+              <Icon name={bot.icon} size={15} />
             </div>
             <div
               style={{
@@ -72,13 +59,7 @@ export function BotChatter({ dialogues, animKey }: BotChatterProps) {
               <div
                 key={animKey}
                 className="fade-in"
-                style={{
-                  fontSize: 12,
-                  color: "var(--color-ink)",
-                  lineHeight: 1.4,
-                  fontStyle: "italic",
-                  wordBreak: "break-word",
-                }}
+                style={{ fontSize: 12, color: "var(--color-ink)", lineHeight: 1.4, fontStyle: "italic", wordBreak: "break-word" }}
               >
                 &ldquo;{dialogues[bot.id] || bot.dialogue[0]}&rdquo;
               </div>

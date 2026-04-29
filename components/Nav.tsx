@@ -12,20 +12,7 @@ export function Nav({ rightSlot }: NavProps) {
   const onLanding = pathname === "/";
 
   return (
-    <nav
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 40px",
-        height: 60,
-        background: "white",
-        borderBottom: "1px solid var(--color-border)",
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-      }}
-    >
+    <nav className="nav">
       <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div
           style={{
@@ -36,6 +23,7 @@ export function Nav({ rightSlot }: NavProps) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            boxShadow: "0 2px 6px rgba(61,59,243,0.30)",
           }}
         >
           <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
@@ -47,29 +35,29 @@ export function Nav({ rightSlot }: NavProps) {
           RL Arena
         </span>
       </Link>
-      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+      <div className="nav-right">
         {rightSlot ?? (
           <>
-            <Link href="/learn" style={{ fontSize: 13, fontWeight: 600, color: pathname === "/learn" ? "var(--color-primary)" : "var(--color-ink-3)" }}>
+            <Link
+              href="/learn"
+              className="hide-md"
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: pathname === "/learn" ? "var(--color-primary)" : "var(--color-ink-3)",
+              }}
+            >
               Learn RL
             </Link>
-            {onLanding ? (
+            {onLanding && (
               <Link
-                href="/play"
-                style={{
-                  background: "var(--color-primary)",
-                  color: "white",
-                  padding: "8px 18px",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
-                }}
+                href="/play?mode=royale"
+                className="btn btn-primary btn-md"
+                style={{ borderRadius: 8, padding: "8px 16px", fontSize: 12 }}
               >
                 Enter Arena
               </Link>
-            ) : null}
+            )}
           </>
         )}
       </div>
