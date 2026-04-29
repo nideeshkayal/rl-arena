@@ -1,6 +1,18 @@
-import { ASSETS, BOTS, EVENTS, type Action, type Asset, type AssetId, type Bot, type BotId, type MarketEvent } from "./data";
+import {
+  ASSETS,
+  BOTS,
+  CRASH_EVENTS,
+  EVENTS,
+  type Action,
+  type Asset,
+  type AssetId,
+  type Bot,
+  type BotId,
+  type MarketEvent,
+  type ModeConfig,
+} from "./data";
 
-/** Seeded RNG so games are reproducible if you want, but here we use a fresh seed each game. */
+/** Linear-congruential RNG so games are reproducible from a given seed. */
 function rng(seedRef: { v: number }) {
   return () => {
     seedRef.v = (seedRef.v * 9301 + 49297) % 233280;
@@ -15,9 +27,7 @@ export interface Portfolio {
 
 export interface BotState extends Portfolio {
   value: number;
-  /** History of portfolio values per turn */
   valueHistory: number[];
-  /** Last action taken (for the dialogue/explanations) */
   lastAction: { action: Action; asset: AssetId | null; qty: number; reasoning: string } | null;
 }
 
@@ -27,24 +37,52 @@ export interface PlayerTrade {
   asset: AssetId;
   qty: number;
   price: number;
-  /** Profit attributable to this trade once exited (filled at game end) */
   pnl?: number;
 }
 
+export interface Prediction {
+  /** Player's guess for the opponent's next action. null = not yet committed. */
+  guess: Action | null;
+  /** Result of the most recent committed prediction. null = not resolved. */
+  lastCorrect: boolean | null;
+  /** Total correct predictions so far. */
+  correct: number;
+  /** Total predictions made. */
+  total: number;
+  /** Total reward earned from predictions. */
+  reward: number;
+}
+
 export interface GameState {
+  mode: ModeConfig;
   turn: number;
   totalTurns: number;
   prices: Record<AssetId, number>;
   history: Record<AssetId, number[]>;
   player: Portfolio & { valueHistory: number[]; trades: PlayerTrade[] };
   bots: Record<BotId, BotState>;
+  /** Bot ids active in this game (subset of all bots). */
+  activeBots: BotId[];
   event: MarketEvent | null;
   done: boolean;
-  /** Volatility multiplier for sandbox/survival modes */
+  /** True if the player ran out of lives. */
+  knockedOut: boolean;
+  /** Volatility multiplier (mode-driven, with sandbox override). */
   volMultiplier: number;
-  /** Whether crash events are amplified (survival) */
-  survival: boolean;
+  /** Lives remaining. -1 means "lives disabled". */
+  lives: number;
+  /** Highest portfolio value reached this game (used for drawdown). */
+  peakValue: number;
+  /** Insider tip uses remaining. */
+  tipsRemaining: number;
+  /** If non-null, the player has peeked the next event — engine commits this on next step(). */
+  peekedEvent: MarketEvent | null;
+  /** Whether the next step's bot decisions are pre-committed (used for prediction reveal). */
+  prediction: Prediction;
+  /** Index into the cycle of crash events for survival mode. */
+  crashCursor: number;
   rngState: { v: number };
+  startingCash: number;
 }
 
 export function emptyHoldings(): Record<AssetId, number> {
@@ -56,25 +94,29 @@ export function startingPrices(): Record<AssetId, number> {
 }
 
 export interface GameInitOptions {
-  totalTurns: number;
+  mode: ModeConfig;
   startingCash?: number;
+  /** Override the mode's volatility multiplier (sandbox). */
   volMultiplier?: number;
-  survival?: boolean;
+  /** Override the mode's turn count (sandbox). */
+  totalTurns?: number;
+  /** Override the active bots (duel/sandbox). */
+  bots?: BotId[];
   seed?: number;
 }
 
 export function createGame(opts: GameInitOptions): GameState {
-  const { totalTurns, startingCash = 10000, volMultiplier = 1, survival = false } = opts;
+  const { mode } = opts;
+  const startingCash = opts.startingCash ?? 10000;
+  const volMultiplier = opts.volMultiplier ?? mode.volMultiplier;
+  const totalTurns = opts.totalTurns ?? mode.turns;
   const seed = opts.seed ?? Math.floor(Math.random() * 1e9);
   const rngState = { v: seed % 233280 || 1 };
-  const prices = startingPrices();
-  const history: Record<AssetId, number[]> = ASSETS.reduce(
-    (acc, a) => ({ ...acc, [a.id]: [a.startPrice] }),
-    {} as Record<AssetId, number[]>
-  );
+  const requested = opts.bots && opts.bots.length > 0 ? opts.bots : (mode.bots.length > 0 ? mode.bots : BOTS.map((b) => b.id));
+  const activeBots = requested.filter((id) => BOTS.some((b) => b.id === id));
   const bots: Record<BotId, BotState> = {} as Record<BotId, BotState>;
-  for (const bot of BOTS) {
-    bots[bot.id] = {
+  for (const id of activeBots) {
+    bots[id] = {
       cash: startingCash,
       holdings: emptyHoldings(),
       value: startingCash,
@@ -82,23 +124,32 @@ export function createGame(opts: GameInitOptions): GameState {
       lastAction: null,
     };
   }
+  const prices = startingPrices();
+  const history: Record<AssetId, number[]> = ASSETS.reduce(
+    (acc, a) => ({ ...acc, [a.id]: [a.startPrice] }),
+    {} as Record<AssetId, number[]>
+  );
   return {
+    mode,
     turn: 0,
     totalTurns,
     prices,
     history,
-    player: {
-      cash: startingCash,
-      holdings: emptyHoldings(),
-      valueHistory: [startingCash],
-      trades: [],
-    },
+    player: { cash: startingCash, holdings: emptyHoldings(), valueHistory: [startingCash], trades: [] },
     bots,
+    activeBots,
     event: null,
     done: false,
+    knockedOut: false,
     volMultiplier,
-    survival,
+    lives: mode.livesEnabled ? mode.startingLives : -1,
+    peakValue: startingCash,
+    tipsRemaining: mode.insiderTips,
+    peekedEvent: null,
+    prediction: { guess: null, lastCorrect: null, correct: 0, total: 0, reward: 0 },
+    crashCursor: 0,
     rngState,
+    startingCash,
   };
 }
 
@@ -108,7 +159,6 @@ export function portfolioValue(p: Portfolio, prices: Record<AssetId, number>): n
   return v;
 }
 
-/** Compute price trend over last N turns as fractional change. */
 function trendOf(history: number[], window = 4): number {
   if (history.length < 2) return 0;
   const w = Math.min(window, history.length - 1);
@@ -118,7 +168,6 @@ function trendOf(history: number[], window = 4): number {
   return (cur - old) / old;
 }
 
-/** Recent volatility estimate as stddev of returns. */
 function volOf(history: number[], window = 5): number {
   if (history.length < 3) return 0;
   const slice = history.slice(-window - 1);
@@ -129,28 +178,17 @@ function volOf(history: number[], window = 5): number {
   return Math.sqrt(v);
 }
 
-/**
- * RL-style policy: each bot picks the action that maximizes its expected reward
- * given its policy weights. We score each (action, asset) pair and softmax-pick.
- *
- * This is *not* a trained neural net, but the decision shape — observe state,
- * score actions by expected reward — mirrors how an RL agent acts at inference.
- */
 export interface BotDecision {
   action: Action;
   asset: AssetId | null;
   qty: number;
-  /** Short human-readable reasoning for the dialogue / debug overlay */
   reasoning: string;
-  /** Suggested dialogue line index */
-  dialogueIdx: number;
 }
 
 interface DecideContext {
   state: GameState;
   bot: Bot;
   rng: () => number;
-  /** Bot's current rank (1 = leading, N = last) */
   rank: number;
   totalAgents: number;
 }
@@ -160,7 +198,6 @@ export function decideBot(ctx: DecideContext): BotDecision {
   const policy = bot.policy;
   const myState = state.bots[bot.id];
 
-  // Compute features for each asset
   const features = ASSETS.map((asset) => {
     const trend = trendOf(state.history[asset.id], 4);
     const vol = volOf(state.history[asset.id], 5);
@@ -168,20 +205,15 @@ export function decideBot(ctx: DecideContext): BotDecision {
     return { asset, trend, vol, eventBoost };
   });
 
-  // Score buy/sell/hold per asset using policy weights
   const candidates: { action: Action; asset: AssetId | null; score: number; reason: string }[] = [];
 
-  // Adaptiveness: when behind, increase aggression; when ahead, decrease.
-  const rankFraction = (rank - 1) / Math.max(1, totalAgents - 1); // 0 leading, 1 last
-  const adaptBoost = (rankFraction - 0.5) * 2 * policy.adaptiveness; // -adapt..+adapt
+  const rankFraction = (rank - 1) / Math.max(1, totalAgents - 1);
+  const adaptBoost = (rankFraction - 0.5) * 2 * policy.adaptiveness;
 
   for (const f of features) {
-    // Expected return signal: trend (weighted by trendBias) + event boost
     const signal = f.trend * (0.5 + policy.trendBias) + f.eventBoost * (0.6 + policy.trendBias * 0.5);
-    // Penalize volatility we don't tolerate
     const volPenalty = Math.max(0, f.vol - policy.riskTolerance * 0.05);
 
-    // Buy score
     const buyScore =
       signal * 12
       - volPenalty * 8
@@ -192,12 +224,9 @@ export function decideBot(ctx: DecideContext): BotDecision {
       action: "buy",
       asset: f.asset.id,
       score: buyScore,
-      reason: buyScore > 0
-        ? `${f.asset.id} trend +${(f.trend * 100).toFixed(1)}% — buying.`
-        : `${f.asset.id} signal weak.`,
+      reason: buyScore > 0 ? `${f.asset.id} trend +${(f.trend * 100).toFixed(1)}% — buying.` : `${f.asset.id} signal weak.`,
     });
 
-    // Sell score: high if we hold the asset and signal turned negative or sellDiscipline hit
     const owned = myState.holdings[f.asset.id] || 0;
     if (owned > 0) {
       const unrealized = (state.prices[f.asset.id] - state.history[f.asset.id][0]) / state.history[f.asset.id][0];
@@ -210,29 +239,24 @@ export function decideBot(ctx: DecideContext): BotDecision {
         action: "sell",
         asset: f.asset.id,
         score: sellScore,
-        reason: sellScore > 0
-          ? `Locking gains on ${f.asset.id}.`
-          : `Holding ${f.asset.id} a bit longer.`,
+        reason: sellScore > 0 ? `Locking gains on ${f.asset.id}.` : `Holding ${f.asset.id}.`,
       });
     }
   }
 
-  // Hold score (baseline)
   const holdScore = policy.patience * 0.6 + (rng() - 0.5) * policy.noise;
   candidates.push({ action: "hold", asset: null, score: holdScore, reason: "Sitting this one out." });
 
-  // Pick the highest-scoring candidate, with small softmax-style randomness.
   candidates.sort((a, b) => b.score - a.score);
   const top = candidates[0];
 
   let qty = 0;
   if (top.action === "buy" && top.asset) {
     const price = state.prices[top.asset];
-    const cashFraction = policy.aggression * (0.4 + Math.random() * 0.4);
+    const cashFraction = policy.aggression * (0.4 + rng() * 0.4);
     qty = Math.floor((myState.cash * cashFraction) / price);
     if (qty <= 0) {
-      // Can't afford — fall back to hold
-      return { action: "hold", asset: null, qty: 0, reasoning: "Out of cash. Holding.", dialogueIdx: Math.floor(rng() * bot.dialogue.length) };
+      return { action: "hold", asset: null, qty: 0, reasoning: "Out of cash. Holding." };
     }
   } else if (top.action === "sell" && top.asset) {
     const owned = myState.holdings[top.asset] || 0;
@@ -240,13 +264,7 @@ export function decideBot(ctx: DecideContext): BotDecision {
     qty = Math.min(qty, owned);
   }
 
-  return {
-    action: top.action,
-    asset: top.asset,
-    qty,
-    reasoning: top.reason,
-    dialogueIdx: Math.floor(rng() * bot.dialogue.length),
-  };
+  return { action: top.action, asset: top.asset, qty, reasoning: top.reason };
 }
 
 export interface PlayerAction {
@@ -255,20 +273,62 @@ export interface PlayerAction {
   qty: number;
 }
 
-/** Runs one full turn. Mutates and returns a new GameState. */
+/**
+ * Sample what the next market event WOULD be without consuming the rng.
+ * Used by the insider-tip feature: we draw the event, store it, and reuse it on step().
+ */
+export function previewEvent(state: GameState): MarketEvent | null {
+  const probe = { v: state.rngState.v };
+  const r = rng(probe);
+  return rollEvent(state, r);
+}
+
+function rollEvent(state: GameState, random: () => number): MarketEvent | null {
+  const nextTurn = state.turn + 1;
+  // Survival: scheduled crash on every Nth turn
+  if (state.mode.crashEveryNTurns > 0 && nextTurn > 0 && nextTurn % state.mode.crashEveryNTurns === 0) {
+    const idx = Math.floor(random() * CRASH_EVENTS.length);
+    return CRASH_EVENTS[idx];
+  }
+  const pool = state.mode.id === "survival" ? EVENTS.concat(EVENTS.filter((e) => e && e.impact < 0)) : EVENTS;
+  return pool[Math.floor(random() * pool.length)] || null;
+}
+
+/** Spend an insider tip — pre-roll the event, store it on state. */
+export function useInsiderTip(state: GameState): GameState {
+  if (state.tipsRemaining <= 0 || state.peekedEvent || state.done) return state;
+  const ns: GameState = { ...state };
+  // Use a probe so peeking is "free" — we don't advance state's rng yet.
+  const probe = { v: state.rngState.v };
+  const random = rng(probe);
+  ns.peekedEvent = rollEvent(state, random);
+  ns.tipsRemaining = state.tipsRemaining - 1;
+  return ns;
+}
+
+/** Set the player's prediction guess for the duel. */
+export function setPrediction(state: GameState, guess: Action | null): GameState {
+  return { ...state, prediction: { ...state.prediction, guess } };
+}
+
+/** Runs one full turn. */
 export function step(state: GameState, playerAction: PlayerAction): GameState {
   if (state.done) return state;
-  const random = rng(state.rngState);
   const ns: GameState = JSON.parse(JSON.stringify(state));
   ns.rngState = state.rngState; // share reference
+  const random = rng(ns.rngState);
 
-  // Pick event (survival mode skews toward crash events)
-  const eventPool = ns.survival
-    ? EVENTS.concat(EVENTS.filter((e) => e && e.impact < 0))
-    : EVENTS;
-  ns.event = eventPool[Math.floor(random() * eventPool.length)] || null;
+  // Event: use peeked event if present (player paid the tip), else roll fresh.
+  if (ns.peekedEvent) {
+    // Burn one rng draw to keep the rng aligned with the original peek.
+    random();
+    ns.event = ns.peekedEvent;
+    ns.peekedEvent = null;
+  } else {
+    ns.event = rollEvent(ns, random);
+  }
 
-  // Update prices using trend + noise + event modifier (vol scaled by mode)
+  // Update prices: trend + noise + event modifier.
   const newPrices: Record<AssetId, number> = {} as Record<AssetId, number>;
   for (const asset of ASSETS) {
     const noise = (random() - 0.5) * 2 * asset.vol * ns.volMultiplier;
@@ -280,7 +340,7 @@ export function step(state: GameState, playerAction: PlayerAction): GameState {
     newPrices[asset.id] = Math.max(1, ns.prices[asset.id] * (1 + change));
   }
 
-  // Apply player action
+  // Player action.
   const pAsset = playerAction.asset;
   const pPrice = newPrices[pAsset];
   if (playerAction.action === "buy" && playerAction.qty > 0) {
@@ -300,19 +360,22 @@ export function step(state: GameState, playerAction: PlayerAction): GameState {
     }
   }
 
-  // Compute player rank vs bots BEFORE bot decisions (so adaptive sees current standing)
+  // Player rank vs active bots BEFORE bot decisions.
   const playerVal = portfolioValue(ns.player, ns.prices);
   const standings = [
     { id: "player", value: playerVal },
-    ...BOTS.map((b) => ({ id: b.id, value: ns.bots[b.id].value })),
+    ...ns.activeBots.map((id) => ({ id, value: ns.bots[id].value })),
   ].sort((a, b) => b.value - a.value);
   const totalAgents = standings.length;
 
-  // Bots decide
-  for (const bot of BOTS) {
-    const rank = standings.findIndex((s) => s.id === bot.id) + 1;
+  // Bot decisions — only active bots.
+  let duelOpponentAction: Action | null = null;
+  for (const id of ns.activeBots) {
+    const bot = BOTS.find((b) => b.id === id)!;
+    const rank = standings.findIndex((s) => s.id === id) + 1;
     const decision = decideBot({ state: ns, bot, rng: random, rank, totalAgents });
-    const bs = ns.bots[bot.id];
+    if (ns.activeBots.length === 1) duelOpponentAction = decision.action;
+    const bs = ns.bots[id];
     if (decision.action === "buy" && decision.asset && decision.qty > 0) {
       const cost = newPrices[decision.asset] * decision.qty;
       if (cost <= bs.cash) {
@@ -330,17 +393,52 @@ export function step(state: GameState, playerAction: PlayerAction): GameState {
     bs.lastAction = { action: decision.action, asset: decision.asset, qty: decision.qty, reasoning: decision.reasoning };
   }
 
-  // Commit prices and history
+  // Resolve prediction (duel only).
+  if (ns.mode.prediction && duelOpponentAction !== null) {
+    const guess = ns.prediction.guess;
+    if (guess !== null) {
+      const correct = guess === duelOpponentAction;
+      ns.prediction.lastCorrect = correct;
+      ns.prediction.total += 1;
+      if (correct) {
+        ns.prediction.correct += 1;
+        ns.prediction.reward += ns.mode.predictionReward;
+        ns.player.cash += ns.mode.predictionReward;
+      }
+    } else {
+      ns.prediction.lastCorrect = null;
+    }
+    ns.prediction.guess = null;
+  }
+
+  // Commit prices and history.
   ns.prices = newPrices;
   for (const asset of ASSETS) ns.history[asset.id].push(newPrices[asset.id]);
 
-  // Compute new portfolio values
+  // Compute new portfolio values.
   const playerNew = portfolioValue(ns.player, ns.prices);
   ns.player.valueHistory.push(playerNew);
-  for (const bot of BOTS) {
-    const v = portfolioValue(ns.bots[bot.id], ns.prices);
-    ns.bots[bot.id].value = v;
-    ns.bots[bot.id].valueHistory.push(v);
+  for (const id of ns.activeBots) {
+    const v = portfolioValue(ns.bots[id], ns.prices);
+    ns.bots[id].value = v;
+    ns.bots[id].valueHistory.push(v);
+  }
+
+  // Survival: lives + peak watermark.
+  if (ns.mode.livesEnabled) {
+    if (playerNew > ns.peakValue) ns.peakValue = playerNew;
+    const drawdown = (ns.peakValue - playerNew) / ns.peakValue;
+    if (drawdown >= ns.mode.drawdownThreshold && ns.lives > 0) {
+      ns.lives -= 1;
+      // Reset peak so each life has its own watermark.
+      ns.peakValue = playerNew;
+      if (ns.lives <= 0) {
+        ns.knockedOut = true;
+        ns.done = true;
+      }
+    }
+  } else {
+    if (playerNew > ns.peakValue) ns.peakValue = playerNew;
   }
 
   ns.turn += 1;
@@ -359,7 +457,8 @@ export interface LeaderboardEntry {
   icon?: string;
 }
 
-export function leaderboard(state: GameState, startingCash = 10000): LeaderboardEntry[] {
+export function leaderboard(state: GameState): LeaderboardEntry[] {
+  const sc = state.startingCash;
   const entries: Omit<LeaderboardEntry, "rank">[] = [
     {
       id: "player",
@@ -367,29 +466,30 @@ export function leaderboard(state: GameState, startingCash = 10000): Leaderboard
       color: "#3D3BF3",
       isPlayer: true,
       value: portfolioValue(state.player, state.prices),
-      return: (portfolioValue(state.player, state.prices) - startingCash) / startingCash,
+      return: (portfolioValue(state.player, state.prices) - sc) / sc,
       icon: "👤",
     },
-    ...BOTS.map<Omit<LeaderboardEntry, "rank">>((bot) => ({
-      id: bot.id,
-      name: bot.name,
-      color: bot.color,
-      isPlayer: false,
-      value: state.bots[bot.id].value,
-      return: (state.bots[bot.id].value - startingCash) / startingCash,
-      icon: bot.icon,
-    })),
+    ...state.activeBots.map<Omit<LeaderboardEntry, "rank">>((id) => {
+      const bot = BOTS.find((b) => b.id === id)!;
+      return {
+        id,
+        name: bot.name,
+        color: bot.color,
+        isPlayer: false,
+        value: state.bots[id].value,
+        return: (state.bots[id].value - sc) / sc,
+        icon: bot.icon,
+      };
+    }),
   ];
   entries.sort((a, b) => b.value - a.value);
   return entries.map((e, i) => ({ ...e, rank: i + 1 }));
 }
 
-/** Compute best/worst trade after the game ends. */
 export function tradeStats(state: GameState) {
   const trades = state.player.trades;
-  if (trades.length === 0) return { best: null, worst: null, count: 0 };
+  if (trades.length === 0) return { best: null as null | { asset: AssetId; pnl: number }, worst: null as null | { asset: AssetId; pnl: number }, count: 0 };
 
-  // For each "buy" find the next "sell" of same asset to compute pnl%
   const closed: { asset: AssetId; pnl: number }[] = [];
   const buys: PlayerTrade[] = [];
   for (const t of trades) {
@@ -397,17 +497,14 @@ export function tradeStats(state: GameState) {
     else if (t.action === "sell") {
       const buy = buys.find((b) => b.asset === t.asset);
       if (buy) {
-        const pnl = (t.price - buy.price) / buy.price;
-        closed.push({ asset: t.asset, pnl });
+        closed.push({ asset: t.asset, pnl: (t.price - buy.price) / buy.price });
         buys.splice(buys.indexOf(buy), 1);
       }
     }
   }
-  // Mark-to-market remaining buys
   for (const b of buys) {
     const cur = state.prices[b.asset];
-    const pnl = (cur - b.price) / b.price;
-    closed.push({ asset: b.asset, pnl });
+    closed.push({ asset: b.asset, pnl: (cur - b.price) / b.price });
   }
   if (closed.length === 0) return { best: null, worst: null, count: trades.length };
   closed.sort((a, b) => b.pnl - a.pnl);

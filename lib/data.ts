@@ -56,6 +56,8 @@ export interface MarketEvent {
   impact: number;
   color: string;
   emoji: string;
+  /** True if this event represents a crash — used in survival mode */
+  crash?: boolean;
 }
 
 export const BOTS: Bot[] = [
@@ -179,8 +181,19 @@ export const EVENTS: (MarketEvent | null)[] = [
   null, null, null, null, // quiet turns
 ];
 
-export interface GameMode {
-  id: "duel" | "royale" | "survival" | "sandbox";
+/** Crash events used in Survival mode at scheduled crash turns. */
+export const CRASH_EVENTS: MarketEvent[] = [
+  { text: "FLASH CRASH",       desc: "Algorithmic sell-off cascades across the market.", asset: "ALL",    impact: -0.18, color: "#F43F5E", emoji: "⚠️", crash: true },
+  { text: "BANK RUN",          desc: "Depositors panic. BANKR collapses.",               asset: "BANKR",  impact: -0.30, color: "#F43F5E", emoji: "🏦", crash: true },
+  { text: "RUG PULL",          desc: "Major CRYPTX project exit-scams.",                 asset: "CRYPTX", impact: -0.40, color: "#F43F5E", emoji: "💀", crash: true },
+  { text: "TECH MELTDOWN",     desc: "Tech sector implodes on bad guidance.",            asset: "TECHX",  impact: -0.25, color: "#F43F5E", emoji: "🔥", crash: true },
+  { text: "BLACK SWAN",        desc: "Unknown unknowns hit. Everything dumps.",          asset: "ALL",    impact: -0.22, color: "#F43F5E", emoji: "🦢", crash: true },
+];
+
+export type ModeId = "duel" | "royale" | "survival" | "sandbox";
+
+export interface ModeConfig {
+  id: ModeId;
   name: string;
   turns: number;
   icon: string;
@@ -188,11 +201,110 @@ export interface GameMode {
   bg: string;
   iconBg: string;
   featured: boolean;
+  /** Volatility multiplier on per-turn noise. */
+  volMultiplier: number;
+  /** Bots present in this mode. Empty array means "all bots". */
+  bots: BotId[];
+  /** Whether the player has lives. If true, losing all lives ends the game. */
+  livesEnabled: boolean;
+  startingLives: number;
+  /** % drawdown from peak that costs a life (0.2 = 20%). */
+  drawdownThreshold: number;
+  /** Force a crash event every N turns. 0 = no scheduled crashes. */
+  crashEveryNTurns: number;
+  /** Whether the player predicts the opponent's next action each turn. */
+  prediction: boolean;
+  /** Reward (in $) for a correct prediction. */
+  predictionReward: number;
+  /** Number of insider-tip peeks granted per game. */
+  insiderTips: number;
+  /** Whether this mode requires a setup step. */
+  customizable: boolean;
 }
 
-export const GAME_MODES: GameMode[] = [
-  { id: "duel",     name: "Quick Duel",   turns: 20, icon: "⚔️",  desc: "Fast 1v1 against a bot of your choice.", bg: "#E8E7FF", iconBg: "#3D3BF3", featured: false },
-  { id: "royale",   name: "Arena Royale", turns: 50, icon: "🏟️", desc: "You vs all 5 bots. Leaderboard updates every turn.", bg: "#3D3BF3", iconBg: "white",   featured: true  },
-  { id: "survival", name: "Survival",     turns: 99, icon: "💀",  desc: "Crash events strike. Survive with your portfolio intact.", bg: "#FFE4E8", iconBg: "#F43F5E", featured: false },
-  { id: "sandbox",  name: "Sandbox",      turns: 30, icon: "🔧",  desc: "Custom rules — you set the volatility & turns.", bg: "#D1FAE5", iconBg: "#10B981", featured: false },
+export const GAME_MODES: ModeConfig[] = [
+  {
+    id: "duel",
+    name: "Quick Duel",
+    turns: 20,
+    icon: "⚔️",
+    desc: "Pick one bot. Predict every move. Beat them.",
+    bg: "#E8E7FF",
+    iconBg: "#3D3BF3",
+    featured: false,
+    volMultiplier: 1,
+    bots: [], // overridden by setup
+    livesEnabled: false,
+    startingLives: 0,
+    drawdownThreshold: 0,
+    crashEveryNTurns: 0,
+    prediction: true,
+    predictionReward: 200,
+    insiderTips: 2,
+    customizable: true,
+  },
+  {
+    id: "royale",
+    name: "Arena Royale",
+    turns: 50,
+    icon: "🏟️",
+    desc: "You vs all 5 bots. Live leaderboard.",
+    bg: "#3D3BF3",
+    iconBg: "white",
+    featured: true,
+    volMultiplier: 1,
+    bots: [], // all
+    livesEnabled: false,
+    startingLives: 0,
+    drawdownThreshold: 0,
+    crashEveryNTurns: 0,
+    prediction: false,
+    predictionReward: 0,
+    insiderTips: 2,
+    customizable: false,
+  },
+  {
+    id: "survival",
+    name: "Survival",
+    turns: 60,
+    icon: "💀",
+    desc: "3 lives. Crashes every 8 turns. Don't get wrecked.",
+    bg: "#FFE4E8",
+    iconBg: "#F43F5E",
+    featured: false,
+    volMultiplier: 1.4,
+    bots: [], // all
+    livesEnabled: true,
+    startingLives: 3,
+    drawdownThreshold: 0.18,
+    crashEveryNTurns: 8,
+    prediction: false,
+    predictionReward: 0,
+    insiderTips: 3,
+    customizable: false,
+  },
+  {
+    id: "sandbox",
+    name: "Sandbox",
+    turns: 30,
+    icon: "🔧",
+    desc: "Configure everything. Make your own arena.",
+    bg: "#D1FAE5",
+    iconBg: "#10B981",
+    featured: false,
+    volMultiplier: 1,
+    bots: [], // overridden by setup
+    livesEnabled: false,
+    startingLives: 0,
+    drawdownThreshold: 0,
+    crashEveryNTurns: 0,
+    prediction: false,
+    predictionReward: 0,
+    insiderTips: 2,
+    customizable: true,
+  },
 ];
+
+export function getMode(id: string | null | undefined): ModeConfig {
+  return GAME_MODES.find((m) => m.id === id) || GAME_MODES[1]; // royale
+}

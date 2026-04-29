@@ -2,14 +2,22 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Nav } from "../../components/Nav";
 import { Badge } from "../../components/Badge";
 import { MiniChart } from "../../components/MiniChart";
-import { Leaderboard } from "../../components/Leaderboard";
 import { BotChatter } from "../../components/BotChatter";
-import { ASSETS, BOTS, GAME_MODES, type Action, type AssetId, type BotId } from "../../lib/data";
-import { createGame, leaderboard, step, tradeStats, type GameState } from "../../lib/engine";
+import { ASSETS, BOTS, getMode, type Action, type AssetId, type Bot, type BotId } from "../../lib/data";
+import {
+  createGame,
+  leaderboard,
+  setPrediction,
+  step,
+  tradeStats,
+  useInsiderTip,
+  type GameState,
+  type LeaderboardEntry,
+} from "../../lib/engine";
 import { fmt$, fmtPct } from "../../lib/format";
 
 const GRADE_TABLE = [
@@ -24,17 +32,31 @@ const GRADE_TABLE = [
 export function PlayClient() {
   const search = useSearchParams();
   const modeId = search.get("mode") || "royale";
-  const mode = GAME_MODES.find((m) => m.id === modeId) || GAME_MODES[1];
+  const mode = useMemo(() => getMode(modeId), [modeId]);
+
+  // Sandbox/duel overrides from URL.
+  const cashOverride = Number(search.get("cash")) || undefined;
+  const turnsOverride = Number(search.get("turns")) || undefined;
+  const volOverride = Number(search.get("vol")) || undefined;
+  const botsParam = search.get("bots");
+  const duelBot = search.get("bot") as BotId | null;
+
+  const overrideBots: BotId[] | undefined = duelBot
+    ? [duelBot]
+    : botsParam
+    ? (botsParam.split(",").filter((b) => BOTS.some((bb) => bb.id === b)) as BotId[])
+    : undefined;
 
   const initial = useMemo(
     () =>
       createGame({
-        totalTurns: mode.turns,
-        startingCash: 10000,
-        volMultiplier: mode.id === "survival" ? 1.4 : 1,
-        survival: mode.id === "survival",
+        mode,
+        startingCash: cashOverride,
+        totalTurns: turnsOverride,
+        volMultiplier: volOverride,
+        bots: overrideBots,
       }),
-    [mode.id, mode.turns]
+    [mode, cashOverride, turnsOverride, volOverride, overrideBots?.join(",")]
   );
 
   const [game, setGame] = useState<GameState>(initial);
@@ -42,14 +64,17 @@ export function PlayClient() {
   const [tradeQty, setTradeQty] = useState(1);
   const [animKey, setAnimKey] = useState(0);
   const [showResults, setShowResults] = useState(false);
+  const [openBot, setOpenBot] = useState<BotId | null>(null);
+  const [autoPlay, setAutoPlay] = useState(false);
+  const autoTimer = useRef<number | null>(null);
 
-  // Reset whenever mode changes
   useEffect(() => {
     setGame(initial);
     setSelectedAsset("TECHX");
     setTradeQty(1);
     setShowResults(false);
     setAnimKey(0);
+    setAutoPlay(false);
   }, [initial]);
 
   const advance = useCallback(
@@ -61,57 +86,76 @@ export function PlayClient() {
     [game.done, selectedAsset, tradeQty]
   );
 
+  // Auto-play loop.
+  useEffect(() => {
+    if (!autoPlay || game.done) {
+      if (autoTimer.current) {
+        window.clearTimeout(autoTimer.current);
+        autoTimer.current = null;
+      }
+      return;
+    }
+    autoTimer.current = window.setTimeout(() => {
+      advance("hold");
+    }, 220);
+    return () => {
+      if (autoTimer.current) window.clearTimeout(autoTimer.current);
+    };
+  }, [autoPlay, game.turn, game.done, advance]);
+
   const lb = useMemo(() => leaderboard(game), [game]);
   const playerEntry = lb.find((e) => e.isPlayer)!;
   const playerReturn = playerEntry.return;
   const playerRank = playerEntry.rank;
 
-  // Build dialogues map from each bot's last action reasoning
+  // Bot dialogues — taken from each bot's last action.
   const dialogues = useMemo(() => {
     const out: Partial<Record<BotId, string>> = {};
-    for (const bot of BOTS) {
-      const last = game.bots[bot.id].lastAction;
+    for (const id of game.activeBots) {
+      const bot = BOTS.find((b) => b.id === id)!;
+      const last = game.bots[id].lastAction;
       if (!last) {
-        out[bot.id] = bot.dialogue[0];
+        out[id] = bot.dialogue[0];
         continue;
       }
-      // Match dialogue style to action
-      if (last.action === "buy" && last.asset) {
-        out[bot.id] = pickByPersonality(bot.id, "buy", last.asset);
-      } else if (last.action === "sell" && last.asset) {
-        out[bot.id] = pickByPersonality(bot.id, "sell", last.asset);
-      } else {
-        out[bot.id] = pickByPersonality(bot.id, "hold", null);
-      }
+      out[id] = pickByPersonality(id, last.action, last.asset);
     }
     return out;
   }, [game]);
 
-  // Open results modal once game ends
   useEffect(() => {
     if (game.done) setShowResults(true);
   }, [game.done]);
+
+  // Tip button.
+  const tip = () => setGame((g) => useInsiderTip(g));
+
+  // Prediction.
+  const setGuess = (a: Action) => setGame((g) => setPrediction(g, a));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       <Nav
         rightSlot={
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 12,
-              color: "var(--color-ink-3)",
-              background: "var(--color-surface-2)",
-              padding: "4px 10px",
-              borderRadius: 6,
-            }}
-          >
-            {mode.name} · {game.done ? "Game over" : "In progress"}
-          </span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {mode.livesEnabled && <LivesIndicator lives={game.lives} max={mode.startingLives} />}
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 12,
+                color: "var(--color-ink-3)",
+                background: "var(--color-surface-2)",
+                padding: "4px 10px",
+                borderRadius: 6,
+              }}
+            >
+              {mode.name} · {game.knockedOut ? "Knocked out" : game.done ? "Game over" : "In progress"}
+            </span>
+          </div>
         }
       />
 
-      {/* Turn progress */}
+      {/* Turn progress + actions toolbar */}
       <div
         style={{
           background: "white",
@@ -126,7 +170,7 @@ export function PlayClient() {
           <div
             style={{
               height: 4,
-              background: "var(--color-primary)",
+              background: game.knockedOut ? "var(--color-loss)" : "var(--color-primary)",
               borderRadius: 2,
               transition: "width 0.5s var(--ease-out)",
               width: `${(game.turn / game.totalTurns) * 100}%`,
@@ -144,7 +188,49 @@ export function PlayClient() {
         >
           Turn {game.turn} / {game.totalTurns}
         </span>
-        {game.done && <Badge color="var(--color-gain)" bg="var(--color-gain-dim)">Game Over</Badge>}
+        <button
+          onClick={tip}
+          disabled={game.tipsRemaining <= 0 || !!game.peekedEvent || game.done}
+          title="Peek at the next event before it happens"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "6px 12px",
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            background: game.tipsRemaining > 0 && !game.peekedEvent && !game.done ? "var(--color-primary-dim)" : "var(--color-surface-2)",
+            color: game.tipsRemaining > 0 && !game.peekedEvent && !game.done ? "var(--color-primary-text)" : "var(--color-ink-4)",
+            cursor: game.tipsRemaining > 0 && !game.peekedEvent && !game.done ? "pointer" : "not-allowed",
+            transition: "all 0.15s var(--ease-out)",
+          }}
+        >
+          🔮 Insider Tip · {game.tipsRemaining}
+        </button>
+        {!game.done && (
+          <button
+            onClick={() => setAutoPlay((v) => !v)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 12px",
+              borderRadius: 8,
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              background: autoPlay ? "var(--color-loss)" : "var(--color-ink)",
+              color: "white",
+            }}
+          >
+            {autoPlay ? "⏸ Stop" : "⏩ Auto-play"}
+          </button>
+        )}
+        {game.done && <Badge color={game.knockedOut ? "var(--color-loss)" : "var(--color-gain)"} bg={game.knockedOut ? "var(--color-loss-dim)" : "var(--color-gain-dim)"}>{game.knockedOut ? "Knocked Out" : "Game Over"}</Badge>}
       </div>
 
       {/* Main grid */}
@@ -154,14 +240,13 @@ export function PlayClient() {
           overflow: "auto",
           padding: "16px 24px",
           display: "grid",
-          gridTemplateColumns: "1fr 300px 280px",
+          gridTemplateColumns: "1fr 320px 280px",
           gap: 14,
           alignItems: "start",
         }}
       >
         {/* LEFT */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
-          {/* Portfolio summary */}
           <div
             style={{
               background: "white",
@@ -214,6 +299,19 @@ export function PlayClient() {
                 #{playerRank}
               </div>
             </div>
+            {mode.livesEnabled && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 4 }}>
+                  Peak
+                </div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "var(--color-hold)" }}>
+                  {fmt$(game.peakValue)}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--color-ink-3)" }}>
+                  -{(((game.peakValue - playerEntry.value) / game.peakValue) * 100).toFixed(1)}% drawdown
+                </div>
+              </div>
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>
                 Portfolio history
@@ -222,7 +320,6 @@ export function PlayClient() {
             </div>
           </div>
 
-          {/* Asset cards */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
             {ASSETS.map((asset) => {
               const hist = game.history[asset.id];
@@ -249,14 +346,7 @@ export function PlayClient() {
                         {asset.id}
                       </span>
                     </div>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-mono)",
-                        fontSize: 11,
-                        fontWeight: 700,
-                        color: chg >= 0 ? "var(--color-gain)" : "var(--color-loss)",
-                      }}
-                    >
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: chg >= 0 ? "var(--color-gain)" : "var(--color-loss)" }}>
                       {fmtPct(chg)}
                     </span>
                   </div>
@@ -270,64 +360,10 @@ export function PlayClient() {
           </div>
 
           {/* Event card */}
-          {game.event ? (
-            <div
-              key={`evt-${game.turn}`}
-              className="fade-in"
-              style={{
-                background: "white",
-                borderRadius: 12,
-                border: "1px solid var(--color-border)",
-                borderLeft: `3px solid ${game.event.color}`,
-                padding: "12px 16px",
-                display: "flex",
-                gap: 12,
-                alignItems: "flex-start",
-              }}
-            >
-              <span style={{ fontSize: 24, flexShrink: 0 }}>{game.event.emoji}</span>
-              <div>
-                <div style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)", marginBottom: 3 }}>
-                  {game.event.text}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--color-ink-3)" }}>{game.event.desc}</div>
-              </div>
-            </div>
-          ) : game.turn > 0 ? (
-            <div
-              style={{
-                background: "white",
-                borderRadius: 12,
-                border: "1px solid var(--color-border)",
-                padding: "12px 16px",
-                display: "flex",
-                gap: 12,
-                alignItems: "center",
-              }}
-            >
-              <span style={{ fontSize: 18 }}>😶</span>
-              <div style={{ fontSize: 13, color: "var(--color-ink-4)", fontStyle: "italic" }}>
-                Quiet turn. No major market events.
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                background: "var(--color-primary-dim)",
-                borderRadius: 12,
-                border: "1px solid #C0BFEE",
-                padding: "12px 16px",
-                display: "flex",
-                gap: 12,
-                alignItems: "center",
-              }}
-            >
-              <span style={{ fontSize: 18 }}>👋</span>
-              <div style={{ fontSize: 13, color: "var(--color-primary-text)", fontWeight: 600 }}>
-                Game on. Pick an asset, set a quantity, then BUY / HOLD / SELL to advance.
-              </div>
-            </div>
-          )}
+          <EventCard game={game} />
+
+          {/* Prediction prompt (Duel only) */}
+          {mode.prediction && !game.done && <PredictionPrompt game={game} setGuess={setGuess} />}
 
           {/* Trade panel */}
           <div
@@ -455,9 +491,53 @@ export function PlayClient() {
           </div>
         </div>
 
-        {/* CENTER — Leaderboard + Holdings */}
+        {/* CENTER — Leaderboard + Holdings + Prediction stats */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <Leaderboard entries={lb} turn={game.turn} totalTurns={game.totalTurns} />
+          <ClickableLeaderboard entries={lb} turn={game.turn} totalTurns={game.totalTurns} onPickBot={setOpenBot} />
+
+          {/* Prediction stats card (Duel only) */}
+          {mode.prediction && (
+            <div
+              style={{
+                background: "white",
+                borderRadius: 14,
+                border: "1px solid var(--color-border)",
+                padding: "14px 16px",
+              }}
+            >
+              <div style={{ fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 700, color: "var(--color-ink)", marginBottom: 8 }}>
+                🧠 Your Read
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "baseline", marginBottom: 6 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 700, color: "var(--color-primary)" }}>
+                  {game.prediction.correct}/{game.prediction.total || 0}
+                </span>
+                <span style={{ fontSize: 12, color: "var(--color-ink-3)" }}>correct</span>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--color-ink-3)" }}>
+                Bonus earned: <strong style={{ color: "var(--color-gain)", fontFamily: "var(--font-mono)" }}>{fmt$(game.prediction.reward)}</strong>
+              </div>
+              {game.prediction.lastCorrect !== null && (
+                <div
+                  className="fade-in"
+                  key={animKey}
+                  style={{
+                    marginTop: 8,
+                    padding: "6px 10px",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    background: game.prediction.lastCorrect ? "var(--color-gain-dim)" : "var(--color-loss-dim)",
+                    color: game.prediction.lastCorrect ? "var(--color-gain)" : "var(--color-loss)",
+                    textAlign: "center",
+                  }}
+                >
+                  {game.prediction.lastCorrect ? "✓ Correct! +$200" : "✗ Wrong. They surprised you."}
+                </div>
+              )}
+            </div>
+          )}
+
           <div
             style={{
               background: "white",
@@ -492,9 +572,9 @@ export function PlayClient() {
           </div>
         </div>
 
-        {/* RIGHT — Bot chatter + RL info */}
+        {/* RIGHT — Bot chatter + RL hint */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <BotChatter dialogues={dialogues} animKey={animKey} />
+          <BotChatterFiltered game={game} dialogues={dialogues} animKey={animKey} onPickBot={setOpenBot} />
           <div
             style={{
               background: "var(--color-bg-alt)",
@@ -504,25 +584,11 @@ export function PlayClient() {
             }}
           >
             <div style={{ fontFamily: "var(--font-display)", fontSize: 12, fontWeight: 700, color: "var(--color-primary)", marginBottom: 8, letterSpacing: "0.03em" }}>
-              ⚙️ RL in plain English
+              ⚙️ Tap a bot
             </div>
             <p style={{ fontSize: 12, color: "var(--color-ink-2)", lineHeight: 1.6 }}>
-              Each bot picks the action with the highest <em>expected reward</em> given its trained reward function. Same market, same turn — different decisions. That&apos;s RL.
+              Click any bot in the leaderboard or chatter feed to see its policy weights and last decision in plain English.
             </p>
-            <Link
-              href="/learn"
-              style={{
-                display: "inline-block",
-                marginTop: 8,
-                fontSize: 11,
-                fontWeight: 700,
-                color: "var(--color-primary)",
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-              }}
-            >
-              Read more →
-            </Link>
           </div>
         </div>
       </div>
@@ -530,6 +596,199 @@ export function PlayClient() {
       {showResults && game.done && (
         <ResultsModal game={game} onReplay={() => location.reload()} />
       )}
+
+      {openBot && <BotDetailModal botId={openBot} game={game} onClose={() => setOpenBot(null)} />}
+    </div>
+  );
+}
+
+/* ─── COMPONENTS ───────────────────────────────────────── */
+
+function LivesIndicator({ lives, max }: { lives: number; max: number }) {
+  return (
+    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+      {Array.from({ length: max }, (_, i) => {
+        const alive = i < lives;
+        return (
+          <span
+            key={i}
+            style={{
+              fontSize: 18,
+              filter: alive ? "none" : "grayscale(1)",
+              opacity: alive ? 1 : 0.3,
+              transition: "all 0.3s var(--ease-out)",
+            }}
+          >
+            ❤️
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function EventCard({ game }: { game: GameState }) {
+  if (game.peekedEvent) {
+    return (
+      <div
+        className="fade-in"
+        style={{
+          background: "var(--color-primary-dim)",
+          borderRadius: 12,
+          border: "1.5px dashed var(--color-primary)",
+          padding: "12px 16px",
+          display: "flex",
+          gap: 12,
+          alignItems: "flex-start",
+        }}
+      >
+        <span style={{ fontSize: 24, flexShrink: 0 }}>🔮</span>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-primary)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>
+            Insider preview · next turn
+          </div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)", marginBottom: 3 }}>
+            {game.peekedEvent.emoji} {game.peekedEvent.text}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--color-ink-2)" }}>{game.peekedEvent.desc}</div>
+          <div style={{ fontSize: 11, color: "var(--color-primary-text)", marginTop: 6, fontStyle: "italic" }}>
+            Trade now — this hits when you advance the turn.
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (game.event) {
+    return (
+      <div
+        key={`evt-${game.turn}`}
+        className="fade-in"
+        style={{
+          background: "white",
+          borderRadius: 12,
+          border: "1px solid var(--color-border)",
+          borderLeft: `3px solid ${game.event.color}`,
+          padding: "12px 16px",
+          display: "flex",
+          gap: 12,
+          alignItems: "flex-start",
+        }}
+      >
+        <span style={{ fontSize: 24, flexShrink: 0 }}>{game.event.emoji}</span>
+        <div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 3 }}>
+            <span style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)" }}>
+              {game.event.text}
+            </span>
+            {game.event.crash && <Badge color="var(--color-loss)" bg="var(--color-loss-dim)">CRASH</Badge>}
+          </div>
+          <div style={{ fontSize: 12, color: "var(--color-ink-3)" }}>{game.event.desc}</div>
+        </div>
+      </div>
+    );
+  }
+  if (game.turn === 0) {
+    return (
+      <div
+        style={{
+          background: "var(--color-primary-dim)",
+          borderRadius: 12,
+          border: "1px solid #C0BFEE",
+          padding: "12px 16px",
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+        }}
+      >
+        <span style={{ fontSize: 18 }}>👋</span>
+        <div style={{ fontSize: 13, color: "var(--color-primary-text)", fontWeight: 600 }}>
+          Game on. Pick an asset, set a quantity, then BUY / HOLD / SELL to advance.
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div
+      style={{
+        background: "white",
+        borderRadius: 12,
+        border: "1px solid var(--color-border)",
+        padding: "12px 16px",
+        display: "flex",
+        gap: 12,
+        alignItems: "center",
+      }}
+    >
+      <span style={{ fontSize: 18 }}>😶</span>
+      <div style={{ fontSize: 13, color: "var(--color-ink-4)", fontStyle: "italic" }}>
+        Quiet turn. No major market events.
+      </div>
+    </div>
+  );
+}
+
+function PredictionPrompt({ game, setGuess }: { game: GameState; setGuess: (a: Action) => void }) {
+  const opp = game.activeBots[0];
+  const oppBot = BOTS.find((b) => b.id === opp);
+  if (!oppBot) return null;
+  const guess = game.prediction.guess;
+  return (
+    <div
+      style={{
+        background: oppBot.dim,
+        borderRadius: 12,
+        border: `1.5px solid ${oppBot.color}55`,
+        padding: "14px 18px",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: oppBot.color,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              marginBottom: 4,
+            }}
+          >
+            🧠 Predict your opponent
+          </div>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)" }}>
+            What will {oppBot.name} do this turn?
+          </div>
+        </div>
+        <span style={{ fontSize: 11, color: "var(--color-ink-3)" }}>
+          {guess ? "✓ Locked in" : "Optional · +$200 if correct"}
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+        {(["buy", "hold", "sell"] as Action[]).map((a) => {
+          const sel = guess === a;
+          const bg = a === "buy" ? "var(--color-gain)" : a === "sell" ? "var(--color-loss)" : "var(--color-hold)";
+          return (
+            <button
+              key={a}
+              onClick={() => setGuess(a)}
+              style={{
+                padding: "10px 0",
+                borderRadius: 8,
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                background: sel ? bg : "white",
+                color: sel ? "white" : "var(--color-ink-2)",
+                border: sel ? "none" : "1.5px solid var(--color-border)",
+                transition: "all 0.15s var(--ease-out)",
+              }}
+            >
+              {a}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -563,16 +822,339 @@ function ActionButton({ variant, onClick, children }: { variant: "buy" | "sell" 
   );
 }
 
+function ClickableLeaderboard({
+  entries,
+  turn,
+  totalTurns,
+  onPickBot,
+}: {
+  entries: LeaderboardEntry[];
+  turn: number;
+  totalTurns: number;
+  onPickBot: (id: BotId) => void;
+}) {
+  return (
+    <div style={{ background: "white", borderRadius: 14, border: "1px solid var(--color-border)", overflow: "hidden" }}>
+      <div
+        style={{
+          padding: "14px 16px",
+          borderBottom: "1px solid var(--color-border)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)" }}>
+          🏆 Leaderboard
+        </span>
+        <span
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            color: "var(--color-ink-3)",
+            background: "var(--color-surface-2)",
+            padding: "3px 8px",
+            borderRadius: 6,
+          }}
+        >
+          Turn {turn}/{totalTurns}
+        </span>
+      </div>
+      {entries.map((entry, i) => {
+        const clickable = !entry.isPlayer;
+        return (
+          <div
+            key={entry.id}
+            onClick={() => clickable && onPickBot(entry.id as BotId)}
+            style={{
+              padding: "11px 16px",
+              borderBottom: "1px solid var(--color-surface-2)",
+              background: entry.isPlayer ? "var(--color-bg-alt)" : "white",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              transition: "all 0.3s var(--ease-spring)",
+              cursor: clickable ? "pointer" : "default",
+            }}
+            onMouseEnter={(e) => {
+              if (clickable) e.currentTarget.style.background = "var(--color-surface-2)";
+            }}
+            onMouseLeave={(e) => {
+              if (clickable) e.currentTarget.style.background = "white";
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 12,
+                fontWeight: 700,
+                color: i === 0 ? "var(--color-hold)" : "var(--color-ink-4)",
+                width: 18,
+                textAlign: "center",
+              }}
+            >
+              {i === 0 ? "🥇" : entry.rank}
+            </span>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: entry.color, flexShrink: 0, boxShadow: `0 0 0 2px ${entry.color}33` }} />
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "var(--color-ink)" }}>
+              {entry.name}
+              {entry.isPlayer && (
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    background: "var(--color-primary-dim)",
+                    color: "var(--color-primary)",
+                    padding: "2px 5px",
+                    borderRadius: 4,
+                    marginLeft: 5,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  YOU
+                </span>
+              )}
+              {clickable && <span style={{ fontSize: 10, color: "var(--color-ink-4)", marginLeft: 6 }}>ⓘ</span>}
+            </span>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-ink)" }}>
+                {fmt$(entry.value)}
+              </div>
+              <div
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: entry.return >= 0 ? "var(--color-gain)" : "var(--color-loss)",
+                }}
+              >
+                {fmtPct(entry.return)}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BotChatterFiltered({
+  game,
+  dialogues,
+  animKey,
+  onPickBot,
+}: {
+  game: GameState;
+  dialogues: Partial<Record<BotId, string>>;
+  animKey: number;
+  onPickBot: (id: BotId) => void;
+}) {
+  const activeBots = game.activeBots.map((id) => BOTS.find((b) => b.id === id)!).filter(Boolean);
+  return (
+    <div style={{ background: "white", borderRadius: 14, border: "1px solid var(--color-border)", padding: "14px 16px" }}>
+      <div style={{ fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 700, color: "var(--color-ink)", marginBottom: 12 }}>
+        💬 Bot Chatter
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {activeBots.map((bot) => (
+          <div
+            key={bot.id}
+            onClick={() => onPickBot(bot.id)}
+            style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}
+          >
+            <div
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 8,
+                background: bot.dim,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 14,
+                flexShrink: 0,
+                color: bot.color,
+                fontWeight: 700,
+              }}
+            >
+              {bot.icon}
+            </div>
+            <div style={{ background: bot.dim, borderRadius: "0 10px 10px 10px", padding: "7px 10px", flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: bot.color, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 2 }}>
+                {bot.name}
+              </div>
+              <div
+                key={animKey}
+                className="fade-in"
+                style={{ fontSize: 12, color: "var(--color-ink)", lineHeight: 1.4, fontStyle: "italic", wordBreak: "break-word" }}
+              >
+                &ldquo;{dialogues[bot.id] || bot.dialogue[0]}&rdquo;
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BotDetailModal({ botId, game, onClose }: { botId: BotId; game: GameState; onClose: () => void }) {
+  const bot = BOTS.find((b) => b.id === botId);
+  if (!bot) return null;
+  const state = game.bots[botId];
+  const last = state?.lastAction;
+  const policy = bot.policy;
+  return (
+    <div
+      onClick={onClose}
+      className="fade-in"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,14,23,0.55)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        zIndex: 250,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="slide-up"
+        style={{
+          background: "white",
+          borderRadius: 20,
+          padding: 28,
+          maxWidth: 520,
+          width: "100%",
+          boxShadow: "0 16px 48px rgba(15,14,23,0.3)",
+          border: `2px solid ${bot.color}`,
+        }}
+      >
+        <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 16 }}>
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              background: bot.dim,
+              borderRadius: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 32,
+              color: bot.color,
+              fontWeight: 700,
+            }}
+          >
+            {bot.icon}
+          </div>
+          <div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: "var(--color-ink)" }}>
+              {bot.name}
+            </div>
+            <div style={{ fontSize: 13, color: bot.color, fontWeight: 700 }}>{bot.role}</div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              marginLeft: "auto",
+              fontSize: 18,
+              color: "var(--color-ink-3)",
+              padding: 4,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div
+          style={{
+            background: "var(--color-surface-2)",
+            borderRadius: 10,
+            padding: "10px 14px",
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>
+            Reward function
+          </div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--color-ink)" }}>
+            {bot.rewardFn}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>
+            Policy weights
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {Object.entries(policy).map(([k, v]) => (
+              <PolicyBar key={k} label={k} value={v} color={bot.color} />
+            ))}
+          </div>
+        </div>
+
+        {last && (
+          <div
+            style={{
+              background: bot.dim,
+              borderRadius: 10,
+              padding: "12px 14px",
+              borderLeft: `4px solid ${bot.color}`,
+            }}
+          >
+            <div style={{ fontSize: 10, fontWeight: 700, color: bot.color, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 4 }}>
+              Last decision
+            </div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 14, fontWeight: 700, color: "var(--color-ink)", marginBottom: 4 }}>
+              {last.action.toUpperCase()}{last.asset ? ` ${last.asset}` : ""}{last.qty > 0 ? ` × ${last.qty}` : ""}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--color-ink-2)", fontStyle: "italic" }}>
+              &ldquo;{last.reasoning}&rdquo;
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PolicyBar({ label, value, color }: { label: string; value: number; color: string }) {
+  const pct = Math.round(value * 100);
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--color-ink-3)", textTransform: "capitalize" }}>{label}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-ink)" }}>{pct}%</span>
+      </div>
+      <div style={{ height: 5, background: "var(--color-surface-2)", borderRadius: 3, overflow: "hidden" }}>
+        <div style={{ height: 5, width: `${pct}%`, background: color, borderRadius: 3, transition: "width 0.4s var(--ease-out)" }} />
+      </div>
+    </div>
+  );
+}
+
 function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => void }) {
   const lb = leaderboard(game);
   const player = lb.find((e) => e.isPlayer)!;
   const stats = tradeStats(game);
-  const grade = GRADE_TABLE[player.rank - 1] || GRADE_TABLE[GRADE_TABLE.length - 1];
+  const grade = GRADE_TABLE[Math.min(player.rank, GRADE_TABLE.length) - 1] || GRADE_TABLE[GRADE_TABLE.length - 1];
   const winner = lb[0];
   const winnerBot = BOTS.find((b) => b.id === winner.id);
+  const isDuel = game.mode.id === "duel";
+  const isSurvival = game.mode.id === "survival";
   const explainWinner = winnerBot
     ? `${winnerBot.name} won. Its reward function — "${winnerBot.rewardFn}" — pushed it toward the strategy that paid off this game.`
-    : "You finished first. Your strategy outperformed every trained bot — beautiful work.";
+    : "You finished first. Your strategy outperformed every trained bot.";
+
+  let title = "📊 Game over";
+  if (game.knockedOut) title = "💀 Knocked out!";
+  else if (player.rank === 1) title = "🥇 You won!";
+  else if (player.rank <= 3) title = "🎯 Great game!";
 
   return (
     <div
@@ -594,6 +1176,7 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
       <div
         className="slide-up"
         style={{
+          position: "relative",
           background: "var(--color-bg)",
           borderRadius: 24,
           padding: "40px 48px",
@@ -604,73 +1187,28 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
           overflow: "auto",
         }}
       >
-        {/* Confetti for winner */}
-        {player.rank === 1 && <Confetti />}
+        {player.rank === 1 && !game.knockedOut && <Confetti />}
 
-        <div
-          style={{
-            fontFamily: "var(--font-body)",
-            fontSize: 11,
-            fontWeight: 700,
-            color: "var(--color-ink-4)",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            marginBottom: 12,
-          }}
-        >
-          {game.totalTurns} turns · Complete
+        <div style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 12 }}>
+          {game.mode.name} · {game.totalTurns} turns · Complete
         </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginBottom: 32, flexWrap: "wrap" }}>
-          <h2
-            style={{
-              fontFamily: "var(--font-display)",
-              fontSize: 48,
-              fontWeight: 700,
-              letterSpacing: "-0.03em",
-              color: "var(--color-ink)",
-            }}
-          >
-            {player.rank === 1 ? "🥇 You won!" : player.rank <= 3 ? "🎯 Great game!" : "📊 Game over"}
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 48, fontWeight: 700, letterSpacing: "-0.03em", color: "var(--color-ink)" }}>
+            {title}
           </h2>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 22,
-              fontWeight: 700,
-              color: player.return >= 0 ? "var(--color-gain)" : "var(--color-loss)",
-            }}
-          >
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: player.return >= 0 ? "var(--color-gain)" : "var(--color-loss)" }}>
             {fmtPct(player.return)}
           </span>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 24, marginBottom: 32 }}>
           {/* Podium */}
-          <div
-            style={{
-              background: "white",
-              borderRadius: 20,
-              border: "1px solid var(--color-border)",
-              padding: 24,
-              boxShadow: "0 4px 16px rgba(15,14,23,0.06)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: "var(--color-ink-4)",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                textAlign: "center",
-                marginBottom: 20,
-              }}
-            >
+          <div style={{ background: "white", borderRadius: 20, border: "1px solid var(--color-border)", padding: 24, boxShadow: "0 4px 16px rgba(15,14,23,0.06)" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.06em", textTransform: "uppercase", textAlign: "center", marginBottom: 20 }}>
               Final Standings
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 10, height: 130, marginBottom: 20 }}>
-              {[lb[1], lb[0], lb[2]].map((entry, col) => {
-                if (!entry) return null;
+              {[lb[1], lb[0], lb[2]].filter(Boolean).map((entry, col) => {
                 const heights = [82, 116, 64];
                 const labels = ["2nd", "1st", "3rd"];
                 return (
@@ -704,9 +1242,7 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
             </div>
             {lb.map((entry, i) => (
               <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid var(--color-surface-2)" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: i === 0 ? "var(--color-hold)" : "var(--color-ink-4)", width: 20 }}>
-                  {i + 1}
-                </span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: i === 0 ? "var(--color-hold)" : "var(--color-ink-4)", width: 20 }}>{i + 1}</span>
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: entry.color, flexShrink: 0 }} />
                 <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: entry.isPlayer ? "var(--color-primary)" : "var(--color-ink)" }}>
                   {entry.name}
@@ -716,9 +1252,7 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
                     </span>
                   )}
                 </span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-ink)" }}>
-                  {fmt$(entry.value)}
-                </span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-ink)" }}>{fmt$(entry.value)}</span>
               </div>
             ))}
           </div>
@@ -727,23 +1261,25 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div
               style={{
-                background: "var(--color-primary)",
+                background: game.knockedOut ? "var(--color-loss)" : "var(--color-primary)",
                 borderRadius: 16,
                 padding: "20px 24px",
                 display: "flex",
                 alignItems: "center",
                 gap: 20,
-                boxShadow: "0 8px 32px rgba(61,59,243,0.25)",
+                boxShadow: game.knockedOut ? "0 8px 32px rgba(244,63,94,0.25)" : "0 8px 32px rgba(61,59,243,0.25)",
               }}
             >
               <div style={{ fontFamily: "var(--font-display)", fontSize: 64, fontWeight: 700, color: "white", lineHeight: 1 }}>
-                {grade.label}
+                {game.knockedOut ? "💀" : grade.label}
               </div>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.6)", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>
-                  Performance Grade
+                  {game.knockedOut ? "Survival ended" : "Performance grade"}
                 </div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "white" }}>{grade.desc}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "white" }}>
+                  {game.knockedOut ? "You lost all 3 lives. The market won." : grade.desc}
+                </div>
                 <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>
                   Finished #{player.rank} out of {lb.length}
                 </div>
@@ -751,20 +1287,34 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <StatCard icon="📈" bg="var(--color-gain-dim)" label="Final Value" value={fmt$(player.value)} valueColor={player.return >= 0 ? "var(--color-gain)" : "var(--color-loss)"} />
-              <StatCard icon="⚡" bg="var(--color-primary-dim)" label="Best Trade" value={stats.best ? `${stats.best.asset} ${fmtPct(stats.best.pnl)}` : "—"} valueColor="var(--color-ink)" />
-              <StatCard icon="📉" bg="var(--color-loss-dim)" label="Worst Trade" value={stats.worst ? `${stats.worst.asset} ${fmtPct(stats.worst.pnl)}` : "—"} valueColor="var(--color-loss)" />
-              <StatCard icon="🔄" bg="var(--color-hold-dim)" label="Total Trades" value={`${stats.count} trades`} valueColor="var(--color-ink)" />
+              <StatCard icon="📈" bg="var(--color-gain-dim)" label="Final value" value={fmt$(player.value)} valueColor={player.return >= 0 ? "var(--color-gain)" : "var(--color-loss)"} />
+              <StatCard icon="⚡" bg="var(--color-primary-dim)" label="Best trade" value={stats.best ? `${stats.best.asset} ${fmtPct(stats.best.pnl)}` : "—"} valueColor="var(--color-ink)" />
+              <StatCard icon="📉" bg="var(--color-loss-dim)" label="Worst trade" value={stats.worst ? `${stats.worst.asset} ${fmtPct(stats.worst.pnl)}` : "—"} valueColor="var(--color-loss)" />
+              <StatCard icon="🔄" bg="var(--color-hold-dim)" label="Total trades" value={`${stats.count}`} valueColor="var(--color-ink)" />
+              {isDuel && (
+                <StatCard
+                  icon="🧠"
+                  bg="var(--color-info-dim)"
+                  label="Predictions"
+                  value={`${game.prediction.correct}/${game.prediction.total} (${game.prediction.total ? Math.round((game.prediction.correct / game.prediction.total) * 100) : 0}%)`}
+                  valueColor="var(--color-info)"
+                />
+              )}
+              {isDuel && (
+                <StatCard icon="💰" bg="var(--color-gain-dim)" label="Prediction $" value={fmt$(game.prediction.reward)} valueColor="var(--color-gain)" />
+              )}
+              {isSurvival && (
+                <StatCard
+                  icon="❤️"
+                  bg="var(--color-loss-dim)"
+                  label="Lives left"
+                  value={`${Math.max(0, game.lives)} / ${game.mode.startingLives}`}
+                  valueColor={game.lives > 0 ? "var(--color-gain)" : "var(--color-loss)"}
+                />
+              )}
             </div>
 
-            <div
-              style={{
-                background: "white",
-                borderRadius: 14,
-                border: "1px solid var(--color-border)",
-                padding: "16px 18px",
-              }}
-            >
+            <div style={{ background: "white", borderRadius: 14, border: "1px solid var(--color-border)", padding: "16px 18px" }}>
               <div style={{ fontFamily: "var(--font-display)", fontSize: 13, fontWeight: 700, color: "var(--color-ink)", marginBottom: 8 }}>
                 Why did {winner.name} win?
               </div>
@@ -804,7 +1354,7 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
               alignItems: "center",
             }}
           >
-            Back to Home
+            Try a different mode
           </Link>
           <Link
             href="/learn"
@@ -820,7 +1370,7 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
               gap: 6,
             }}
           >
-            Learn how each bot was rewarded →
+            How were the bots rewarded? →
           </Link>
         </div>
       </div>
@@ -830,44 +1380,16 @@ function ResultsModal({ game, onReplay }: { game: GameState; onReplay: () => voi
 
 function StatCard({ icon, bg, label, value, valueColor }: { icon: string; bg: string; label: string; value: string; valueColor: string }) {
   return (
-    <div
-      style={{
-        background: "white",
-        borderRadius: 14,
-        border: "1px solid var(--color-border)",
-        padding: "16px 18px",
-      }}
-    >
+    <div style={{ background: "white", borderRadius: 14, border: "1px solid var(--color-border)", padding: "16px 18px" }}>
       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: bg,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 18,
-          }}
-        >
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
           {icon}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 11, color: "var(--color-ink-4)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
             {label}
           </div>
-          <div
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 18,
-              fontWeight: 700,
-              color: valueColor,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: valueColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {value}
           </div>
         </div>
@@ -907,7 +1429,6 @@ function Confetti() {
   );
 }
 
-/** Picks a dialogue line that fits the bot's personality + last action. */
 function pickByPersonality(botId: BotId, action: Action, asset: AssetId | null): string {
   const lines: Record<BotId, Record<Action, string[]>> = {
     safe: {

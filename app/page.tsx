@@ -12,7 +12,11 @@ export default function LandingPage() {
 
   const start = () => {
     const mode = GAME_MODES.find((m) => m.id === selectedMode)!;
-    router.push(`/play?mode=${mode.id}`);
+    if (mode.customizable) {
+      router.push(`/setup/${mode.id}`);
+    } else {
+      router.push(`/play?mode=${mode.id}`);
+    }
   };
 
   return (
