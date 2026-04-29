@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Nav } from "../../components/Nav";
 import { Icon } from "../../components/Icon";
 import { BOTS } from "../../lib/data";
@@ -292,6 +293,60 @@ export default function LearnPage() {
           </div>
         </section>
 
+        {/* Interactive Reward Simulator */}
+        <RewardSimulator />
+
+        {/* Deep dive FAQ */}
+        <section style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 12 }}>
+            <Icon name="telescope" size={13} /> Deep dive
+          </div>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 8 }}>
+            Common questions about RL
+          </h2>
+          <p style={{ fontSize: 15, color: "var(--color-ink-3)", marginBottom: 20, maxWidth: 640 }}>
+            Click any question to expand the answer.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <Accordion title="How is RL different from supervised learning?" icon="git-branch">
+              In supervised learning, you give the model labeled examples: &ldquo;this image is a cat.&rdquo;
+              In RL, there are no labels. The agent takes actions in an environment, receives rewards
+              (or penalties), and figures out what works through trial and error. Think of it like
+              learning to ride a bike vs. studying a textbook about bikes.
+            </Accordion>
+            <Accordion title="What is a policy, and why does it matter?" icon="workflow">
+              A policy is the agent&apos;s decision-making function. Given the current state (prices,
+              holdings, trends), the policy outputs an action (buy, sell, hold). In RL Arena, each
+              bot&apos;s policy is defined by weights like aggression, patience, and risk tolerance.
+              Two bots with different policies will make completely different decisions in the same market.
+            </Accordion>
+            <Accordion title="What is the exploration-exploitation tradeoff?" icon="compass">
+              Should an agent exploit what it already knows works, or explore new strategies that might
+              be better? ChaosBot has high noise (60%) — it explores constantly, sometimes stumbling on
+              genius moves. SniperBot has low noise (2%) — it exploits a refined strategy. Real-world
+              RL systems must balance both.
+            </Accordion>
+            <Accordion title="Can RL agents learn to game their own reward?" icon="alert-triangle">
+              Yes — this is called reward hacking. If you reward only raw returns, you get YOLOBot:
+              an agent that takes maximum risk because that&apos;s how it maximizes expected reward.
+              It&apos;s technically optimal under its reward function, but not what a human designer
+              would consider &ldquo;good&rdquo; trading. Designing reward functions is an open research problem.
+            </Accordion>
+            <Accordion title="What is multi-agent RL?" icon="network">
+              When multiple agents interact in the same environment, each agent&apos;s optimal strategy
+              depends on what the others do. AdaptiveBot demonstrates this: its reward is based on
+              leaderboard rank, so it watches other agents and adjusts. This creates complex game-theoretic
+              dynamics that single-agent RL can&apos;t capture.
+            </Accordion>
+            <Accordion title="How does this game relate to real-world RL?" icon="cpu">
+              Real trading firms use RL for portfolio optimization, execution, and hedging. The core
+              loop is the same: observe market state, take an action, get a reward signal, update
+              the strategy. RL Arena simplifies the math but preserves the key ideas: policy design,
+              reward shaping, partial observability, and multi-agent dynamics.
+            </Accordion>
+          </div>
+        </section>
+
         {/* CTA */}
         <section
           style={{
@@ -325,7 +380,7 @@ export default function LearnPage() {
               boxShadow: "0 4px 16px rgba(61,59,243,0.3)",
             }}
           >
-            Enter the Arena →
+            Enter the Arena
           </Link>
         </section>
       </div>
@@ -337,16 +392,7 @@ function PolicyDial({ label, value, color }: { label: string; value: number; col
   const pct = Math.round(value * 100);
   return (
     <div style={{ width: 110, textAlign: "right" }}>
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          color: "var(--color-ink-4)",
-          letterSpacing: "0.05em",
-          textTransform: "uppercase",
-          marginBottom: 4,
-        }}
-      >
+      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 4 }}>
         {label}
       </div>
       <div style={{ height: 6, background: "var(--color-surface-2)", borderRadius: 3, overflow: "hidden", marginBottom: 4 }}>
@@ -356,3 +402,135 @@ function PolicyDial({ label, value, color }: { label: string; value: number; col
     </div>
   );
 }
+
+function RewardSimulator() {
+  const [aggression, setAggression] = useState(0.5);
+  const [patience, setPatience] = useState(0.5);
+  const [riskTolerance, setRiskTolerance] = useState(0.5);
+  const [noise, setNoise] = useState(0.1);
+
+  const profile = aggression > 0.7 && riskTolerance > 0.7
+    ? { name: "YOLOBot-like", color: "#F97316", desc: "High aggression + high risk = all-in momentum trader. Huge swings." }
+    : patience > 0.7 && noise < 0.15
+    ? { name: "SniperBot-like", color: "#8B5CF6", desc: "Patient and precise. Waits for high-confidence entries." }
+    : noise > 0.4
+    ? { name: "ChaosBot-like", color: "#F43F5E", desc: "High noise = unpredictable. Sometimes genius, sometimes disaster." }
+    : aggression < 0.35 && riskTolerance < 0.4
+    ? { name: "SafeBot-like", color: "#14B8A6", desc: "Conservative. Protects capital, avoids volatility." }
+    : { name: "AdaptiveBot-like", color: "#6366F1", desc: "Balanced profile. Would adapt strategy based on competition." };
+
+  return (
+    <section style={{
+      background: "white", borderRadius: 20, border: "1px solid var(--color-border)",
+      padding: 32, marginBottom: 32, boxShadow: "0 2px 8px rgba(15,14,23,0.04)",
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--color-ink-4)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 12 }}>
+        <Icon name="sliders" size={13} /> Interactive
+      </div>
+      <h3 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, marginBottom: 8 }}>
+        Build your own bot personality
+      </h3>
+      <p style={{ fontSize: 14, color: "var(--color-ink-3)", marginBottom: 24, maxWidth: 560, lineHeight: 1.55 }}>
+        Drag the sliders to shape a policy. Watch how the predicted personality changes — this is how reward functions shape behavior.
+      </p>
+
+      <div className="concepts-grid" style={{ marginBottom: 24 }}>
+        <SimSlider label="Aggression" value={aggression} onChange={setAggression} color="var(--color-loss)"
+          help="How much cash the bot commits per trade" />
+        <SimSlider label="Patience" value={patience} onChange={setPatience} color="#8B5CF6"
+          help="How long the bot waits for a good setup" />
+        <SimSlider label="Risk Tolerance" value={riskTolerance} onChange={setRiskTolerance} color="#F97316"
+          help="How much volatility the bot accepts" />
+        <SimSlider label="Noise (Exploration)" value={noise} onChange={setNoise} color="#F43F5E"
+          help="Probability of random action — exploration rate" />
+      </div>
+
+      <div style={{
+        background: profile.color + "11", border: `2px solid ${profile.color}44`,
+        borderRadius: 14, padding: "18px 22px",
+        transition: "all 0.3s var(--ease-out)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, background: profile.color + "22",
+            display: "flex", alignItems: "center", justifyContent: "center", color: profile.color,
+          }}>
+            <Icon name="brain" size={20} />
+          </div>
+          <div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 700, color: profile.color }}>
+              {profile.name}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--color-ink-3)" }}>Predicted personality</div>
+          </div>
+        </div>
+        <p style={{ fontSize: 13, color: "var(--color-ink-2)", lineHeight: 1.55 }}>{profile.desc}</p>
+      </div>
+    </section>
+  );
+}
+
+function SimSlider({ label, value, onChange, color, help }: {
+  label: string; value: number; onChange: (v: number) => void; color: string; help: string;
+}) {
+  const pct = Math.round(value * 100);
+  return (
+    <div style={{ background: "var(--color-bg)", borderRadius: 12, padding: "14px 16px", border: "1px solid var(--color-border)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-ink)" }}>{label}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color }}>{pct}%</span>
+      </div>
+      <input type="range" min={0} max={100} value={pct}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+        style={{ width: "100%", accentColor: color }} />
+      <div style={{ fontSize: 11, color: "var(--color-ink-4)", marginTop: 4 }}>{help}</div>
+    </div>
+  );
+}
+
+function Accordion({ title, icon, children }: {
+  title: string; icon: "git-branch" | "workflow" | "compass" | "alert-triangle" | "network" | "cpu";
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{
+      background: "white", borderRadius: 14, border: "1px solid var(--color-border)",
+      overflow: "hidden", transition: "all 0.2s var(--ease-out)",
+      boxShadow: open ? "0 4px 16px rgba(15,14,23,0.08)" : "0 2px 8px rgba(15,14,23,0.04)",
+    }}>
+      <button onClick={() => setOpen(!open)} style={{
+        width: "100%", padding: "16px 20px", display: "flex", alignItems: "center", gap: 12,
+        textAlign: "left", cursor: "pointer", background: "transparent",
+      }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 8, background: open ? "var(--color-primary-dim)" : "var(--color-surface-2)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: open ? "var(--color-primary)" : "var(--color-ink-3)",
+          transition: "all 0.2s var(--ease-out)", flexShrink: 0,
+        }}>
+          <Icon name={icon} size={16} />
+        </div>
+        <span style={{ flex: 1, fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700,
+          color: open ? "var(--color-primary)" : "var(--color-ink)" }}>
+          {title}
+        </span>
+        <span style={{
+          transform: open ? "rotate(90deg)" : "rotate(0deg)",
+          transition: "transform 0.2s var(--ease-out)", display: "inline-flex",
+          color: "var(--color-ink-4)",
+        }}>
+          <Icon name="chevron-right" size={16} />
+        </span>
+      </button>
+      {open && (
+        <div className="fade-in" style={{
+          padding: "0 20px 18px 64px", fontSize: 14, color: "var(--color-ink-2)", lineHeight: 1.65,
+        }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
