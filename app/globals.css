@@ -1,0 +1,91 @@
+/* ============================================================
+   RL ARENA — Design Tokens (ported from design system)
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Base */
+  --color-bg:           #F8F7F4;
+  --color-bg-alt:       #F0EFF9;
+  --color-surface:      #FFFFFF;
+  --color-surface-2:    #F4F3F8;
+  --color-border:       #E8E7F0;
+  --color-border-focus: #3D3BF3;
+
+  /* Ink */
+  --color-ink:          #0F0E17;
+  --color-ink-2:        #3D3C52;
+  --color-ink-3:        #6B6A7A;
+  --color-ink-4:        #A5A4B3;
+  --color-ink-inverse:  #FFFFFF;
+
+  /* Brand */
+  --color-primary:      #3D3BF3;
+  --color-primary-dark: #2A28C9;
+  --color-primary-dim:  #E8E7FF;
+  --color-primary-text: #1A18A0;
+
+  /* Semantic */
+  --color-gain:     #10B981; --color-gain-dim: #D1FAE5;
+  --color-loss:     #F43F5E; --color-loss-dim: #FFE4E8;
+  --color-hold:     #F59E0B; --color-hold-dim: #FEF3C7;
+  --color-info:     #0EA5E9; --color-info-dim: #E0F2FE;
+
+  /* Bots */
+  --bot-safe:     #14B8A6; --bot-safe-dim:     #CCFBF1;
+  --bot-yolo:     #F97316; --bot-yolo-dim:     #FFEDD5;
+  --bot-sniper:   #8B5CF6; --bot-sniper-dim:   #EDE9FE;
+  --bot-chaos:    #F43F5E; --bot-chaos-dim:    #FFE4E8;
+  --bot-adaptive: #6366F1; --bot-adaptive-dim: #E0E7FF;
+
+  /* Assets */
+  --asset-techx:  #3D3BF3;
+  --asset-bankr:  #14B8A6;
+  --asset-cryptx: #F97316;
+
+  /* Type */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Courier New', monospace;
+
+  /* Easing */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #__next { height: 100%; width: 100%; }
+body {
+  font-family: var(--font-body);
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+button { cursor: pointer; border: none; background: none; font-family: inherit; }
+input { font-family: inherit; }
+a { color: inherit; text-decoration: none; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #C0BFEE; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #9C9AE0; }
+
+/* ── Animations ────────────────────────────────────────────── */
+@keyframes fadeIn   { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideUp  { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes rankBump { 0% { transform: scale(1); } 40% { transform: scale(1.04); } 100% { transform: scale(1); } }
+@keyframes pulse    { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes countUp  { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes shake    { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+@keyframes glow     { 0%, 100% { box-shadow: 0 0 18px rgba(61,59,243,0.25); } 50% { box-shadow: 0 0 32px rgba(61,59,243,0.45); } }
+@keyframes podiumRise { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+@keyframes confetti { 0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+
+.fade-in   { animation: fadeIn 0.4s var(--ease-out) both; }
+.slide-up  { animation: slideUp 0.5s var(--ease-out) both; }
+.rank-bump { animation: rankBump 0.4s var(--ease-spring); }
+.pulse     { animation: pulse 1.6s ease-in-out infinite; }
+.count-up  { animation: countUp 0.3s ease both; }
+.glow      { animation: glow 2.4s ease-in-out infinite; }
